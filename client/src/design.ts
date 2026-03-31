@@ -112,7 +112,9 @@ export const DATA_LAYERS = [
 export const TAG_STYLES: Record<string, { bg: string; color: string }> = {
   "Quiet Zone": { bg: "rgba(0,220,130,0.12)", color: colors.emerald },
   "Top School": { bg: "rgba(100,140,255,0.12)", color: colors.blue },
-  "Low Crime": { bg: "rgba(0,200,255,0.12)", color: colors.cyan },
+  "Low risk": { bg: "rgba(0,220,130,0.14)", color: colors.emerald },
+  "Moderate risk": { bg: "rgba(255,180,0,0.14)", color: colors.yellow },
+  "High risk": { bg: "rgba(255,60,60,0.14)", color: colors.red },
 };
 
 // ── Gauge Colors ──

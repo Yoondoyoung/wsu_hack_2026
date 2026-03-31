@@ -1,10 +1,11 @@
 import { useState, type ElementType, type ReactNode } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Bed, Bath, Square, Flame, Snowflake, Car, Wrench, Building,
-  GraduationCap, User, Phone, Clock, Eye, Heart, TrendingUp, ExternalLink,
+  GraduationCap, User, Phone, Clock, Eye, Heart, TrendingUp, ExternalLink, ShieldAlert,
 } from 'lucide-react';
 import type { Property } from '../../types/property';
 import { formatPrice, formatSqft } from '../../utils/formatters';
+import { crimeRiskLabel } from '../../utils/crimeRisk';
 
 interface Props {
   property: Property;
@@ -104,10 +105,14 @@ export function PropertyDetail({ property, onClose }: Props) {
               </div>
             </div>
             <p className="text-[#e2e2f0] text-sm">{property.address}</p>
-            <div className="flex items-center gap-4 mt-2 text-sm text-[#8888a8]">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-[#8888a8]">
               <span className="flex items-center gap-1"><Bed size={14} />{property.beds} beds</span>
               <span className="flex items-center gap-1"><Bath size={14} />{property.baths} baths</span>
               <span className="flex items-center gap-1"><Square size={14} />{formatSqft(property.sqft)} sqft</span>
+              <span className="flex items-center gap-1" title="Reported incidents within 2 miles">
+                <ShieldAlert size={14} className="text-[#f87171]" />
+                {crimeRiskLabel(property.crimeRiskLevel)} ({property.crimeIncidentCount ?? 0} within {property.crimeRiskRadiusMiles ?? 0.5} mi)
+              </span>
             </div>
             {property.detailUrl && (
               <a

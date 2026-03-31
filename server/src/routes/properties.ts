@@ -42,6 +42,106 @@ function sqftFromListing(l: any, det: any, info: any): number {
   return 0;
 }
 
+/**
+ * Local neighborhood radius for incident counts. The crime overlay is a long-run
+ * cumulative layer, so raw counts inside a large radius (e.g. 2 mi) are huge for
+ * almost every listing; 0.5 mi keeps a walkable “nearby” scale.
+ */
+const CRIME_RISK_RADIUS_MILES = 0.5;
+
+/** Great-circle distance in miles (WGS84). */
+function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 3959;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/** Crime points as [lng, lat] from the same source as the crime overlay. */
+function getCrimeLngLatPoints(): [number, number][] {
+  const filePath = join(__dirname, '..', 'data', 'overlays', 'crime_slc.json');
+  const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+  const features = raw.layers[0].features as { geometry: { x: number; y: number } }[];
+  return features.map((f) => {
+    const [lng, lat] = proj4(UTAH_CENTRAL, 'EPSG:4326', [f.geometry.x, f.geometry.y]);
+    return [lng, lat] as [number, number];
+  });
+}
+
+function countCrimesWithinMiles(
+  homeLng: number,
+  homeLat: number,
+  points: [number, number][],
+  radiusMiles: number
+): number {
+  const padLat = radiusMiles / 69;
+  const cosLat = Math.cos((homeLat * Math.PI) / 180);
+  const padLng = radiusMiles / (69 * Math.max(0.2, Math.abs(cosLat)));
+  let n = 0;
+  for (const [plng, plat] of points) {
+    if (Math.abs(plat - homeLat) > padLat) continue;
+    if (Math.abs(plng - homeLng) > padLng) continue;
+    if (haversineMiles(homeLat, homeLng, plat, plng) <= radiusMiles) n++;
+  }
+  return n;
+}
+
+/** Tertile cutoffs on sorted counts (same batch): ~33% low / ~33% medium / ~33% high. */
+function tertileThresholds(counts: number[]): { lowMax: number; medMax: number } {
+  if (counts.length === 0) return { lowMax: 0, medMax: 0 };
+  const sorted = [...counts].sort((a, b) => a - b);
+  const n = sorted.length;
+  const lowMax = sorted[Math.floor(0.33 * (n - 1))];
+  const medMax = sorted[Math.floor(0.66 * (n - 1))];
+  return { lowMax, medMax };
+}
+
+function crimeRiskLevelFromTertiles(
+  count: number,
+  lowMax: number,
+  medMax: number
+): 'low' | 'medium' | 'high' {
+  if (count <= lowMax) return 'low';
+  if (count <= medMax) return 'medium';
+  return 'high';
+}
+
+function enrichWithCrimeRisk(listings: any[]): any[] {
+  let points: [number, number][];
+  try {
+    points = getCrimeLngLatPoints();
+  } catch (e) {
+    console.warn('Crime file missing; crimeRiskLevel defaults to low.', e);
+    return listings.map((p) => ({
+      ...p,
+      crimeIncidentCount: 0,
+      crimeRiskRadiusMiles: CRIME_RISK_RADIUS_MILES,
+      crimeRiskLevel: 'low' as const,
+    }));
+  }
+  console.log(
+    `Crime risk: ${points.length} incidents in indexer, radius ${CRIME_RISK_RADIUS_MILES} mi, tertiles within batch`
+  );
+  const counts = listings.map((p) => {
+    const [lng, lat] = p.coordinates as [number, number];
+    return countCrimesWithinMiles(lng, lat, points, CRIME_RISK_RADIUS_MILES);
+  });
+  const { lowMax, medMax } = tertileThresholds(counts);
+  return listings.map((p, i) => {
+    const crimeIncidentCount = counts[i]!;
+    return {
+      ...p,
+      crimeIncidentCount,
+      crimeRiskRadiusMiles: CRIME_RISK_RADIUS_MILES,
+      crimeRiskLevel: crimeRiskLevelFromTertiles(crimeIncidentCount, lowMax, medMax),
+    };
+  });
+}
+
 function extractPhotoUrls(listing: any): string[] {
   const detailImages = Array.isArray(listing.detail?.images) ? listing.detail.images : [];
   const preferredDetailImages = detailImages.filter(
@@ -72,7 +172,7 @@ function loadProperties() {
   const filePath = join(__dirname, '..', 'data', 'houseList', 'salt-lake-city-for-sale.enriched.json');
   const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
 
-  return raw.listings.map((l: any) => {
+  const mapped = raw.listings.map((l: any) => {
     const det = l.detail || {};
     const info = l.raw?.hdpData?.homeInfo || {};
     const photos = extractPhotoUrls(l);
@@ -80,7 +180,7 @@ function loadProperties() {
     const longitude = typeof l.longitude === 'number' ? l.longitude : typeof info.longitude === 'number' ? info.longitude : -111.891;
 
     return {
-      id: l.zpid,
+      id: String(l.zpid),
       address: l.address,
       streetAddress: l.raw?.addressStreet || l.address.split(',')[0],
       city: l.raw?.addressCity || 'Salt Lake City',
@@ -132,6 +232,8 @@ function loadProperties() {
       flexText: l.raw?.flexFieldText || '',
     };
   });
+
+  return enrichWithCrimeRisk(mapped);
 }
 
 let cachedProperties: any[] | null = null;

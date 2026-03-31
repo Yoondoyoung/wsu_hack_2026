@@ -3,12 +3,13 @@ import {
   ChevronLeft, ChevronRight, ChevronDown,
   Bed, Bath, Square,
   Volume2, GraduationCap,
-  AlertCircle,
+  AlertCircle, ShieldAlert,
 } from 'lucide-react';
 import { useMortgagePredictor } from '../../hooks/useMortgagePredictor';
 import type { MortgageRequestPayload } from '../../types/mortgage';
 import type { Property } from '../../types/property';
 import { formatPrice, formatSqft } from '../../utils/formatters';
+import { crimeRiskLabel } from '../../utils/crimeRisk';
 import {
   glass, colors, TAG_STYLES, ctaButtonStyle,
   getGaugeColor, getGaugeLabel,
@@ -229,10 +230,16 @@ function ExpandedDetail({ property }: { property: Property }) {
         </div>
 
         {/* Badges */}
-        <div className="flex gap-1.5 mt-2 flex-wrap">
+        <div className="flex gap-1.5 mt-2 flex-wrap items-center">
+          <PropertyBadge
+            label={crimeRiskLabel(property.crimeRiskLevel)}
+            icon={ShieldAlert}
+          />
+          <span className="text-[9px] leading-tight" style={{ color: colors.whiteSubtle }}>
+            {property.crimeIncidentCount ?? 0} incidents within {property.crimeRiskRadiusMiles ?? 0.5} mi
+          </span>
           {hasQuietZone && <PropertyBadge label="Quiet Zone" icon={Volume2} />}
           {hasTopSchool && <PropertyBadge label="Top School" icon={GraduationCap} />}
-          {property.schools.length > 0 && <PropertyBadge label="Low Crime" />}
         </div>
 
         {/* Detail link */}
@@ -297,7 +304,12 @@ function CompactCard({ property, selected, dimmed, onClick }: { property: Proper
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold leading-tight" style={{ color: selected ? colors.cyan : colors.white }}>{formatPrice(property.price)}</p>
           <p className="text-[11px] mt-0.5 truncate" style={{ color: colors.whiteMuted }}>{property.streetAddress}</p>
-          <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>{property.beds}bd · {property.baths}ba · {formatSqft(property.sqft)}ft²</p>
+          <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>
+            {property.beds}bd · {property.baths}ba · {formatSqft(property.sqft)}ft²
+            <span style={{ color: TAG_STYLES[crimeRiskLabel(property.crimeRiskLevel)]?.color ?? colors.whiteSubtle }}>
+              {' · '}{crimeRiskLabel(property.crimeRiskLevel)}
+            </span>
+          </p>
         </div>
 
         {/* Status badge */}

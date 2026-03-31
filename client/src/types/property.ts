@@ -38,6 +38,12 @@ export interface Property {
   priceHistory: PriceHistoryItem[];
   statusText: string;
   flexText: string;
+  /** Mapped incidents within crimeRiskRadiusMiles (server-computed from crime overlay). */
+  crimeIncidentCount: number;
+  /** Haversine radius in miles used for crimeIncidentCount (e.g. 0.5). */
+  crimeRiskRadiusMiles: number;
+  /** low / medium / high by tertiles within the current listing batch (not absolute crime rate). */
+  crimeRiskLevel: 'low' | 'medium' | 'high';
 }
 
 export interface SchoolInfo {

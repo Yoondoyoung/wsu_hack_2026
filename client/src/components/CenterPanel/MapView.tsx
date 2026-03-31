@@ -6,6 +6,7 @@ import type { MapViewMode, OverlayType } from '../../types/map';
 import type { Property } from '../../types/property';
 import { fetchOverlay } from '../../services/api';
 import { formatPrice, formatSqft } from '../../utils/formatters';
+import { crimeRiskLabel } from '../../utils/crimeRisk';
 import { colors, glass } from '../../design';
 
 /** Matches `structures-fill` OCC_CLS → fill-color in this file */
@@ -162,6 +163,9 @@ function GlowMarker({
           </p>
           <p className="text-xs mt-0.5" style={{ color: colors.whiteMuted }}>
             {property.beds}bd · {property.baths}ba · {formatSqft(property.sqft)} sqft
+          </p>
+          <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>
+            {crimeRiskLabel(property.crimeRiskLevel)} · {property.crimeIncidentCount ?? 0} within {property.crimeRiskRadiusMiles ?? 0.5} mi
           </p>
           <p className="text-[10px] mt-0.5 truncate" style={{ color: colors.whiteSubtle }}>
             {property.streetAddress}

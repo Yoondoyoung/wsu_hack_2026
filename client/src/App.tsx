@@ -90,7 +90,7 @@ export default function App() {
       </div>
 
       {/* Left panel */}
-      <div className={`absolute left-4 top-4 bottom-4 z-10 transition-all duration-300 ease-in-out ${leftCollapsed ? 'w-[58px]' : 'w-[272px]'}`}>
+      <div className={`absolute left-4 top-4 bottom-4 z-10 transition-all duration-300 ease-in-out ${leftCollapsed ? 'w-[58px]' : 'w-[282px]'}`}>
         <LeftPanel
           viewMode={mapState.viewMode}
           activeOverlays={mapState.activeOverlays}

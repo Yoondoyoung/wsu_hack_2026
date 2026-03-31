@@ -207,7 +207,7 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
           zoom: 15,
           duration: 450,
           essential: true,
-          offset: [-180, 0],
+          offset: [-185, 0],
         });
       }
     }

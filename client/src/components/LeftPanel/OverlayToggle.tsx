@@ -66,7 +66,7 @@ export function OverlayToggle({ activeOverlays, onToggle, collapsed }: Props) {
           <button
             key={type}
             onClick={() => onToggle(type)}
-            className="group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden text-left"
+            className="group flex items-center gap-3 pl-4 pr-3.5 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden text-left min-w-0"
             style={{ background: active ? bgActive : 'transparent' }}
             onMouseEnter={(e) => {
               if (!active) (e.currentTarget as HTMLElement).style.background = colors.whiteTint;
@@ -97,7 +97,7 @@ export function OverlayToggle({ activeOverlays, onToggle, collapsed }: Props) {
             />
 
             <span
-              className="flex-1 text-xs font-medium transition-colors duration-200"
+              className="flex-1 text-xs font-medium transition-colors duration-200 min-w-0 pr-0.5"
               style={{ color: active ? colors.white : colors.whiteSubtle }}
             >
               {label}

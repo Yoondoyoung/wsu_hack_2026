@@ -83,7 +83,7 @@ export function LeftPanel({
 
       {/* Header */}
       <div
-        className={`flex items-center gap-3 px-5 py-5 flex-shrink-0 ${collapsed ? 'justify-center px-3' : ''}`}
+        className={`flex items-center gap-3 py-5 flex-shrink-0 ${collapsed ? 'justify-center px-3' : 'px-6'}`}
         style={{ borderBottom: `1px solid ${colors.border}` }}
       >
         <div
@@ -116,26 +116,27 @@ export function LeftPanel({
       <div className="flex-1 overflow-y-auto py-5 space-y-5">
 
         {/* Map View */}
-        <section className={collapsed ? 'px-2' : 'px-4'}>
+        <section className={collapsed ? 'px-2' : 'px-6'}>
           {!collapsed && <SectionLabel>Map View</SectionLabel>}
           <ViewToggle current={viewMode} onChange={onViewChange} collapsed={collapsed} />
         </section>
 
-        <div className={collapsed ? 'mx-2' : 'mx-4'}><Divider /></div>
+        <div className={collapsed ? 'mx-2' : 'mx-6'}><Divider /></div>
 
         {/* Data Layers */}
-        <section className={collapsed ? 'px-2' : 'px-4'}>
+        <section className={collapsed ? 'px-2' : 'px-6'}>
           {!collapsed && (
-            <div className="flex items-center justify-between mb-3">
-              <SectionLabel>Data Layers</SectionLabel>
+            <div className="flex items-start justify-between gap-2 mb-3 min-w-0">
+              <div className="min-w-0 flex-1">
+                <SectionLabel>Data Layers</SectionLabel>
+              </div>
               {activeCount > 0 && (
                 <span
-                  className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+                  className="text-[9px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5"
                   style={{
                     background: `rgba(0,200,255,0.12)`,
                     color: colors.cyan,
                     border: `1px solid rgba(0,200,255,0.22)`,
-                    marginTop: -12,
                   }}
                 >
                   {activeCount} ON
@@ -149,20 +150,22 @@ export function LeftPanel({
         {/* Filters — expanded only */}
         {!collapsed && (
           <>
-            <div className="mx-4"><Divider /></div>
+            <div className="mx-6"><Divider /></div>
 
-            <section className="px-4">
+            <section className="px-6">
               <button
-                className="flex items-center justify-between w-full mb-4"
+                type="button"
+                className="flex items-center justify-between gap-2 w-full mb-4 min-w-0 text-left"
                 onClick={() => setFiltersOpen((v) => !v)}
               >
-                <SectionLabel>Filters</SectionLabel>
+                <div className="min-w-0 flex-1">
+                  <SectionLabel>Filters</SectionLabel>
+                </div>
                 <span
-                  className="text-[9px] font-bold transition-transform duration-200"
+                  className="text-[9px] font-bold transition-transform duration-200 flex-shrink-0 pt-0.5"
                   style={{
                     color: colors.whiteSubtle,
                     transform: filtersOpen ? 'rotate(180deg)' : 'none',
-                    marginTop: -12,
                   }}
                 >
                   ▼
@@ -179,7 +182,7 @@ export function LeftPanel({
                         {formatPriceShort(priceRange[0])} – {formatPriceShort(priceRange[1])}
                       </span>
                     </div>
-                    <div className="space-y-2.5">
+                    <div className="space-y-2.5 px-0.5">
                       <input type="range" min={MIN_PRICE} max={MAX_PRICE} step={50000}
                         value={priceRange[0]}
                         onChange={(e) => {
@@ -208,7 +211,7 @@ export function LeftPanel({
                     <input type="range" min={0} max={10} step={1}
                       value={minSchoolRating}
                       onChange={(e) => onMinSchoolRatingChange(Number(e.target.value))}
-                      className="w-full"
+                      className="w-full px-0.5 box-border"
                       style={{ accentColor: colors.emerald }} />
                     <div className="flex justify-between mt-1.5">
                       <span className="text-[9px]" style={{ color: colors.whiteFaint }}>Any</span>
@@ -219,10 +222,10 @@ export function LeftPanel({
               )}
             </section>
 
-            <div className="mx-4"><Divider /></div>
+            <div className="mx-6"><Divider /></div>
 
             {/* Legend */}
-            <section className="px-4">
+            <section className="px-6">
               <SectionLabel>Heatmap Legend</SectionLabel>
               <div className="space-y-2.5">
                 {[
@@ -247,7 +250,7 @@ export function LeftPanel({
       {/* Footer */}
       {!collapsed && (
         <div
-          className="px-5 py-3.5 flex-shrink-0"
+          className="px-6 py-3.5 flex-shrink-0"
           style={{ borderTop: `1px solid ${colors.border}` }}
         >
           <p className="text-[9px] font-medium tracking-widest uppercase" style={{ color: colors.whiteFaint }}>

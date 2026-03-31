@@ -47,7 +47,7 @@ export function ViewToggle({ current, onChange, collapsed }: Props) {
 
   return (
     <div
-      className="flex p-1 gap-0.5"
+      className="flex p-1.5 gap-0.5"
       style={{
         background: colors.whiteSoft,
         border: `1px solid ${colors.border}`,

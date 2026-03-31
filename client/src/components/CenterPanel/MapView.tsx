@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, memo } from 'react';
+import { useRef, useState, useEffect, useCallback, memo, useMemo } from 'react';
 import Map, { Source, Layer, Marker, Popup, type MapRef } from 'react-map-gl/mapbox';
 import type { LayerProps } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -6,7 +6,17 @@ import type { MapViewMode, OverlayType } from '../../types/map';
 import type { Property } from '../../types/property';
 import { fetchOverlay } from '../../services/api';
 import { formatPrice, formatSqft } from '../../utils/formatters';
-import { colors } from '../../design';
+import { colors, glass } from '../../design';
+
+/** Matches `structures-fill` OCC_CLS → fill-color in this file */
+const STRUCTURE_FOOTPRINT_LEGEND: { label: string; color: string }[] = [
+  { label: 'Residential', color: '#22c55e' },
+  { label: 'Government', color: '#3b82f6' },
+  { label: 'Commercial', color: '#ef4444' },
+  { label: 'Education', color: '#facc15' },
+  { label: 'Industrial', color: '#6b7280' },
+  { label: 'Other / unknown', color: '#4b5563' },
+];
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string;
 
@@ -165,6 +175,12 @@ function GlowMarker({
 function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSelectProperty, onMarkerScreenPosition }: Props) {
   const mapRef = useRef<MapRef>(null);
   const [overlayData, setOverlayData] = useState<Record<string, GeoJSON.FeatureCollection>>({});
+  const overlayDataRef = useRef(overlayData);
+  overlayDataRef.current = overlayData;
+  const overlayIdsKey = useMemo(
+    () => Array.from(activeOverlays).sort().join(','),
+    [activeOverlays]
+  );
   const [crimePopup, setCrimePopup] = useState<CrimePopupData | null>(null);
   const structuresTileUrl =
     typeof window !== 'undefined'
@@ -220,16 +236,20 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
     return () => cancelAnimationFrame(rafId);
   }, [selectedId, properties, onMarkerScreenPosition]);
 
-  // Fetch overlay GeoJSON on toggle
+  // Fetch overlay GeoJSON when the active set changes (do NOT depend on overlayData — that re-fired
+  // the effect on every fetch and could block or thrash layers). Skip if already cached in ref.
   useEffect(() => {
     activeOverlays.forEach((overlay) => {
-      if (!overlayData[overlay]) {
-        fetchOverlay(overlay).then((data) => {
+      if (overlayDataRef.current[overlay]) return;
+      fetchOverlay(overlay)
+        .then((data) => {
           setOverlayData((prev) => ({ ...prev, [overlay]: data }));
+        })
+        .catch((err) => {
+          console.error(`[MapView] Failed to load overlay "${overlay}"`, err);
         });
-      }
     });
-  }, [activeOverlays, overlayData]);
+  }, [overlayIdsKey, activeOverlays]); // activeOverlays: forEach target; overlayIdsKey: stable trigger when set contents change
 
   const handleMarkerClick = useCallback(
     (id: string) => {
@@ -257,7 +277,7 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
   }, []);
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full relative">
       <Map
         ref={mapRef}
         {...viewState}
@@ -395,6 +415,42 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
           </Marker>
         ))}
       </Map>
+
+      {/* Building footprints legend — fixed bottom-right of map (left of 360px panel on desktop) */}
+      {activeOverlays.has('structures') && (
+        <div
+          className="absolute z-[11] pointer-events-none max-w-[220px] bottom-0 right-3 sm:right-[calc(360px+12px)]"
+          style={{
+            ...glass.pill,
+            borderRadius: 12,
+            padding: '10px 12px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+          }}
+        >
+          <p
+            className="text-[10px] font-bold uppercase tracking-widest mb-2"
+            style={{ color: colors.whiteMuted, letterSpacing: '0.08em' }}
+          >
+            Building footprints
+          </p>
+          <ul className="space-y-1.5">
+            {STRUCTURE_FOOTPRINT_LEGEND.map(({ label, color }) => (
+              <li key={label} className="flex items-center gap-2.5">
+                <span
+                  className="w-3.5 h-3.5 rounded flex-shrink-0 ring-1 ring-white/15"
+                  style={{ background: color }}
+                />
+                <span className="text-[11px] font-medium leading-tight" style={{ color: colors.white }}>
+                  {label}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[9px] mt-2 leading-snug" style={{ color: colors.whiteSubtle }}>
+            Fill by occupancy (OCC_CLS). Zoom in to see outlines.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import {
   GraduationCap, User, Phone, Clock, Eye, Heart, TrendingUp, ExternalLink,
 } from 'lucide-react';
 import type { Property } from '../../types/property';
-import { formatPrice } from '../../utils/formatters';
+import { formatPrice, formatSqft } from '../../utils/formatters';
 
 interface Props {
   property: Property;
@@ -107,7 +107,7 @@ export function PropertyDetail({ property, onClose }: Props) {
             <div className="flex items-center gap-4 mt-2 text-sm text-[#8888a8]">
               <span className="flex items-center gap-1"><Bed size={14} />{property.beds} beds</span>
               <span className="flex items-center gap-1"><Bath size={14} />{property.baths} baths</span>
-              <span className="flex items-center gap-1"><Square size={14} />{property.sqft.toLocaleString()} sqft</span>
+              <span className="flex items-center gap-1"><Square size={14} />{formatSqft(property.sqft)} sqft</span>
             </div>
             {property.detailUrl && (
               <a

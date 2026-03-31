@@ -8,7 +8,7 @@ import {
 import { useMortgagePredictor } from '../../hooks/useMortgagePredictor';
 import type { MortgageRequestPayload } from '../../types/mortgage';
 import type { Property } from '../../types/property';
-import { formatPrice } from '../../utils/formatters';
+import { formatPrice, formatSqft } from '../../utils/formatters';
 import {
   glass, colors, TAG_STYLES, ctaButtonStyle,
   getGaugeColor, getGaugeLabel,
@@ -154,7 +154,7 @@ function ExpandedDetail({ property }: { property: Property }) {
         <div className="flex items-center gap-3 mt-2 text-xs" style={{ color: colors.whiteMuted }}>
           <span className="flex items-center gap-1"><Bed size={12} style={{ color: colors.whiteSubtle }} />{property.beds} bd</span>
           <span className="flex items-center gap-1"><Bath size={12} style={{ color: colors.whiteSubtle }} />{property.baths} ba</span>
-          <span className="flex items-center gap-1"><Square size={12} style={{ color: colors.whiteSubtle }} />{property.sqft.toLocaleString()} sqft</span>
+          <span className="flex items-center gap-1"><Square size={12} style={{ color: colors.whiteSubtle }} />{formatSqft(property.sqft)} sqft</span>
         </div>
 
         {/* Badges */}
@@ -226,7 +226,7 @@ function CompactCard({ property, selected, dimmed, onClick }: { property: Proper
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold leading-tight" style={{ color: selected ? colors.cyan : colors.white }}>{formatPrice(property.price)}</p>
           <p className="text-[11px] mt-0.5 truncate" style={{ color: colors.whiteMuted }}>{property.streetAddress}</p>
-          <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>{property.beds}bd · {property.baths}ba · {property.sqft.toLocaleString()}ft²</p>
+          <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>{property.beds}bd · {property.baths}ba · {formatSqft(property.sqft)}ft²</p>
         </div>
 
         {/* Status badge */}

@@ -1,6 +1,6 @@
 import { Bed, Bath, Square, Clock, Eye, Heart } from 'lucide-react';
 import type { Property } from '../../types/property';
-import { formatPrice } from '../../utils/formatters';
+import { formatPrice, formatSqft } from '../../utils/formatters';
 
 interface Props {
   property: Property;
@@ -61,7 +61,7 @@ export function PropertyCard({ property, selected, onClick }: Props) {
         <div className="flex items-center gap-3 text-xs text-[#8888a8]">
           <span className="flex items-center gap-1"><Bed size={12} />{property.beds} bd</span>
           <span className="flex items-center gap-1"><Bath size={12} />{property.baths} ba</span>
-          <span className="flex items-center gap-1"><Square size={12} />{property.sqft.toLocaleString()} sqft</span>
+          <span className="flex items-center gap-1"><Square size={12} />{formatSqft(property.sqft)} sqft</span>
           {property.pricePerSqft && <span className="ml-auto">${property.pricePerSqft}/sqft</span>}
         </div>
       </div>

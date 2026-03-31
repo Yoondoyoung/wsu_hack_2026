@@ -5,7 +5,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import type { MapViewMode, OverlayType } from '../../types/map';
 import type { Property } from '../../types/property';
 import { fetchOverlay } from '../../services/api';
-import { formatPrice } from '../../utils/formatters';
+import { formatPrice, formatSqft } from '../../utils/formatters';
 import { colors } from '../../design';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string;
@@ -151,7 +151,7 @@ function GlowMarker({
             {formatPrice(property.price)}
           </p>
           <p className="text-xs mt-0.5" style={{ color: colors.whiteMuted }}>
-            {property.beds}bd · {property.baths}ba · {property.sqft.toLocaleString()} sqft
+            {property.beds}bd · {property.baths}ba · {formatSqft(property.sqft)} sqft
           </p>
           <p className="text-[10px] mt-0.5 truncate" style={{ color: colors.whiteSubtle }}>
             {property.streetAddress}

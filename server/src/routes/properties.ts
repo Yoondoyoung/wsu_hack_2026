@@ -20,6 +20,28 @@ function normalizeArray(value: unknown): string[] {
     .filter((item): item is string => Boolean(item));
 }
 
+function numOrZero(v: unknown): number {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = parseFloat(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
+}
+
+/** Sqft is sometimes null in source JSON; fall back to raw/homeInfo/detail. */
+function sqftFromListing(l: any, det: any, info: any): number {
+  const candidates = [l.sqft, l.raw?.area, info.livingArea, info.livingAreaValue, det.livingArea];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c) && c >= 0) return c;
+    if (typeof c === 'string' && c.trim() !== '') {
+      const n = parseFloat(c);
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
+  }
+  return 0;
+}
+
 function extractPhotoUrls(listing: any): string[] {
   const detailImages = Array.isArray(listing.detail?.images) ? listing.detail.images : [];
   const preferredDetailImages = detailImages.filter(
@@ -47,7 +69,7 @@ function extractPhotoUrls(listing: any): string[] {
 
 // Load and transform enriched Zillow data
 function loadProperties() {
-  const filePath = join(__dirname, '..', 'data', 'houseList', 'salt-lake-city-for-sale.enriched.sample.json');
+  const filePath = join(__dirname, '..', 'data', 'houseList', 'salt-lake-city-for-sale.enriched.json');
   const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
 
   return raw.listings.map((l: any) => {
@@ -65,9 +87,9 @@ function loadProperties() {
       state: l.raw?.addressState || 'UT',
       zip: l.raw?.addressZipcode || '',
       price: l.price,
-      beds: l.beds,
-      baths: l.baths,
-      sqft: l.sqft,
+      beds: numOrZero(l.beds ?? info.bedrooms ?? l.raw?.beds),
+      baths: numOrZero(l.baths ?? info.bathrooms ?? l.raw?.baths),
+      sqft: sqftFromListing(l, det, info),
       yearBuilt: det.yearBuilt || 0,
       coordinates: [longitude, latitude],
       homeType: det.propertyTypeDimension || info.homeType || 'Unknown',

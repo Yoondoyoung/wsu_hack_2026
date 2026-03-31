@@ -1,16 +1,14 @@
 export interface MortgageRequestPayload {
-  person_age: number;
-  person_gender: string;
-  person_education: string;
-  person_income: number;
-  person_home_ownership: string;
-  loan_intent: string;
-  loan_amnt: number;
-  loan_int_rate: number;
-  loan_percent_income: number;
-  cb_person_default_on_file: string;
-  cb_person_cred_hist_length: number;
-  previous_loan_defaults_on_file: string;
+  loan_amount: number;
+  property_value: number;
+  income: number;
+  debt_to_income_ratio: string;
+  loan_type: number;
+  loan_purpose: number;
+  loan_term: number;
+  applicant_age: string;
+  applicant_sex: number;
+  occupancy_type: number;
 }
 
 export interface MortgageResponse {

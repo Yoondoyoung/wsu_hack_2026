@@ -2,10 +2,11 @@
   "name": "utah-smart-path",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npm run dev:ml\"",
     "dev:client": "cd client && npm run dev",
     "dev:server": "cd server && npm run dev",
-    "install:all": "cd client && npm install && cd ../server && npm install"
+    "dev:ml": "cd server/ml && python3 main.py",
+    "install:all": "cd client && npm install && cd ../server && npm install && pip3 install -r server/ml/requirements.txt"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"

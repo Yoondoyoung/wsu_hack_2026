@@ -4,7 +4,6 @@ import {
   ChevronRight,
   Map,
   Satellite,
-  Box,
   Shield,
   GraduationCap,
   Users,
@@ -12,6 +11,8 @@ import {
   Building2,
   SlidersHorizontal,
   DollarSign,
+  BedDouble,
+  Bath,
 } from 'lucide-react';
 import type { MapViewMode, OverlayType } from '../../types/map';
 import { glass, colors } from '../../design';
@@ -27,6 +28,12 @@ interface Props {
   onPriceRangeChange: (range: [number, number]) => void;
   minSchoolRating: number;
   onMinSchoolRatingChange: (rating: number) => void;
+  mapPriceMode: 'listing' | 'netMonthly';
+  onMapPriceModeChange: (mode: 'listing' | 'netMonthly') => void;
+  minBeds: number;
+  onMinBedsChange: (beds: number) => void;
+  minBaths: number;
+  onMinBathsChange: (baths: number) => void;
 }
 
 const MIN_PRICE = 0;
@@ -42,7 +49,6 @@ function formatPriceShort(val: number) {
 const VIEW_MODES: { key: MapViewMode; label: string; icon: React.ElementType }[] = [
   { key: 'default', label: 'Default', icon: Map },
   { key: 'satellite', label: 'Satellite', icon: Satellite },
-  { key: '3d', label: '3D View', icon: Box },
 ];
 
 const OVERLAY_CONFIG: {
@@ -104,6 +110,12 @@ export function LeftPanel({
   onToggleCollapse,
   priceRange,
   onPriceRangeChange,
+  mapPriceMode,
+  onMapPriceModeChange,
+  minBeds,
+  onMinBedsChange,
+  minBaths,
+  onMinBathsChange,
 }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const minPricePct = ((priceRange[0] - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100;
@@ -118,20 +130,6 @@ export function LeftPanel({
         borderColor: colors.border,
       }}
     >
-      {/* Collapse toggle */}
-      <button
-        onClick={onToggleCollapse}
-        className={`absolute z-20 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 bottom-12 ${collapsed ? 'left-1/2 -translate-x-1/2' : 'right-2'}`}
-        style={{
-          background: colors.bgPanelMedium,
-          border: `1px solid ${colors.border}`,
-          color: colors.whiteSubtle,
-          boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
-        }}
-      >
-        {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
-      </button>
-
       {/* Header */}
       <div
         className={`flex items-center gap-3 px-5 py-5 border-b flex-shrink-0 ${collapsed ? 'justify-center px-2' : ''}`}
@@ -276,8 +274,27 @@ export function LeftPanel({
             </button>
 
             {filtersOpen && (
-              <div className="space-y-5">
-                <div>
+              <div className="space-y-7">
+                <div className="pt-0.5 -mb-1px">
+                  <button
+                    type="button"
+                    onClick={() => onMapPriceModeChange(mapPriceMode === 'listing' ? 'netMonthly' : 'listing')}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all"
+                    style={{
+                      borderColor: mapPriceMode === 'netMonthly' ? `${colors.cyan}88` : colors.border,
+                      background: mapPriceMode === 'netMonthly' ? `${colors.cyan}14` : colors.whiteSoft,
+                    }}
+                  >
+                    <span className="text-[11px] font-medium" style={{ color: mapPriceMode === 'netMonthly' ? colors.cyan : colors.whiteMuted }}>
+                      {mapPriceMode === 'netMonthly' ? '$/mo' : 'Price'}
+                    </span>
+                    <span className="text-[10px]" style={{ color: colors.whiteSubtle }}>
+                      {mapPriceMode === 'listing' ? '→ $/mo' : '→ Price'}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="pt-0.5">
                   <div className="flex items-center justify-between mb-2.5">
                     <div className="flex items-center gap-1.5">
                       <DollarSign size={11} style={{ color: colors.whiteSubtle }} />
@@ -330,6 +347,56 @@ export function LeftPanel({
                   </div>
                 </div>
 
+                <div className="pt-0.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <BedDouble size={11} style={{ color: colors.whiteSubtle }} />
+                      <span className="text-[11px]" style={{ color: colors.whiteMuted }}>Min Bedrooms</span>
+                    </div>
+                    <span className="text-[11px] font-semibold tabular-nums" style={{ color: colors.whiteMuted }}>{minBeds}+</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {[0, 1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => onMinBedsChange(n)}
+                        className="flex-1 py-1 rounded text-[10px] font-medium transition-all border"
+                        style={minBeds === n
+                          ? { background: `${colors.blue}22`, borderColor: `${colors.blue}55`, color: '#93c5fd' }
+                          : { background: colors.whiteSoft, borderColor: colors.border, color: colors.whiteSubtle }}
+                      >
+                        {n === 0 ? 'Any' : `${n}+`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-0.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Bath size={11} style={{ color: colors.whiteSubtle }} />
+                      <span className="text-[11px]" style={{ color: colors.whiteMuted }}>Min Bathrooms</span>
+                    </div>
+                    <span className="text-[11px] font-semibold tabular-nums" style={{ color: colors.whiteMuted }}>{minBaths}+</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {[0, 1, 2, 3, 4].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => onMinBathsChange(n)}
+                        className="flex-1 py-1 rounded text-[10px] font-medium transition-all border"
+                        style={minBaths === n
+                          ? { background: `${colors.blue}22`, borderColor: `${colors.blue}55`, color: '#93c5fd' }
+                          : { background: colors.whiteSoft, borderColor: colors.border, color: colors.whiteSubtle }}
+                      >
+                        {n === 0 ? 'Any' : `${n}+`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             )}
           </div>
@@ -337,14 +404,38 @@ export function LeftPanel({
       )}
 
       {!collapsed && (
-        <div className="px-[30px] py-3.5 border-t flex-shrink-0" style={{ borderTopColor: colors.border }}>
+        <div className="px-[30px] py-3.5 border-t flex-shrink-0 flex items-center justify-between" style={{ borderTopColor: colors.border }}>
           <p className="text-[9px] font-medium tracking-widest uppercase" style={{ color: colors.white }}>
             WSU Hackathon · 2026
           </p>
+          <button
+            onClick={onToggleCollapse}
+            className="w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110"
+            style={{
+              background: colors.bgPanelMedium,
+              border: `1px solid ${colors.border}`,
+              color: colors.whiteSubtle,
+              boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
+            }}
+          >
+            <ChevronLeft size={12} />
+          </button>
         </div>
       )}
       {collapsed && (
-        <div className="px-2 py-3 border-t flex-shrink-0 flex justify-center" style={{ borderTopColor: colors.border }}>
+        <div className="px-2 py-3 border-t flex-shrink-0 flex items-center justify-center gap-1.5" style={{ borderTopColor: colors.border }}>
+          <button
+            onClick={onToggleCollapse}
+            className="w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110"
+            style={{
+              background: colors.bgPanelMedium,
+              border: `1px solid ${colors.border}`,
+              color: colors.whiteSubtle,
+              boxShadow: '0 2px 10px rgba(0,0,0,0.45)',
+            }}
+          >
+            <ChevronRight size={10} />
+          </button>
           <p className="text-[8px] font-semibold" style={{ color: colors.whiteFaint, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
             WSU
           </p>

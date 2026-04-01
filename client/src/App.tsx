@@ -19,6 +19,8 @@ export default function App() {
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000000]);
   const [minSchoolRating, setMinSchoolRating] = useState(0);
   const [mapPriceMode, setMapPriceMode] = useState<MapPriceMode>('listing');
+  const [minBeds, setMinBeds] = useState(0);
+  const [minBaths, setMinBaths] = useState(0);
 
   /** Refs only — no setState at 60fps (prevents map jitter from full-tree re-renders). */
   const markerPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -45,6 +47,8 @@ export default function App() {
 
   const filteredProperties = properties.filter((p) => {
     if (p.price < priceRange[0] || p.price > priceRange[1]) return false;
+    if (p.beds < minBeds) return false;
+    if (p.baths < minBaths) return false;
     if (minSchoolRating > 0 && p.schools.length > 0) {
       const maxRating = Math.max(...p.schools.map((s) => s.rating));
       if (maxRating < minSchoolRating) return false;
@@ -73,7 +77,6 @@ export default function App() {
           onSelectProperty={handleSelectProperty}
           onMarkerScreenPosition={handleMarkerScreenPosition}
           mapPriceMode={mapPriceMode}
-          onMapPriceModeChange={setMapPriceMode}
           netMonthlyMap={netMonthlyMap}
         />
       </div>
@@ -111,7 +114,7 @@ export default function App() {
       </div>
 
       {/* Left panel */}
-      <div className={`absolute left-4 top-4 bottom-4 z-10 transition-all duration-300 ease-in-out ${leftCollapsed ? 'w-[58px]' : 'w-[282px]'}`}>
+      <div className={`absolute left-2 top-2 bottom-2 z-10 transition-all duration-300 ease-in-out ${leftCollapsed ? 'w-[58px]' : 'w-[282px]'}`}>
         <LeftPanel
           viewMode={mapState.viewMode}
           activeOverlays={mapState.activeOverlays}
@@ -123,6 +126,12 @@ export default function App() {
           onPriceRangeChange={setPriceRange}
           minSchoolRating={minSchoolRating}
           onMinSchoolRatingChange={setMinSchoolRating}
+          mapPriceMode={mapPriceMode}
+          onMapPriceModeChange={setMapPriceMode}
+          minBeds={minBeds}
+          onMinBedsChange={setMinBeds}
+          minBaths={minBaths}
+          onMinBathsChange={setMinBaths}
         />
       </div>
 
@@ -137,19 +146,6 @@ export default function App() {
         />
       </div>
 
-      {/* Bottom status pill */}
-      {!loading && (
-        <div
-          className="absolute bottom-5 left-1/2 -translate-x-1/2 z-10 pointer-events-none flex items-center gap-2.5 px-4 py-2"
-          style={{ ...glass.pill, borderRadius: 999 }}
-        >
-          <div className="w-1.5 h-1.5 rounded-full" style={{ background: colors.cyan, boxShadow: `0 0 6px ${colors.cyan}` }} />
-          <span className="text-xs font-medium" style={{ color: colors.whiteMuted }}>
-            <span style={{ color: colors.white, fontWeight: 600 }}>{filteredProperties.length}</span>
-            {' '}properties · Click a marker to explore
-          </span>
-        </div>
-      )}
     </DashboardLayout>
   );
 }

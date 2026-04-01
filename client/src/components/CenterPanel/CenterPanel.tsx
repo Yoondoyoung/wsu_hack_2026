@@ -11,7 +11,6 @@ interface Props {
   onSelectProperty: (id: string) => void;
   onMarkerScreenPosition?: (pos: { x: number; y: number } | null) => void;
   mapPriceMode: MapPriceMode;
-  onMapPriceModeChange: (mode: MapPriceMode) => void;
   netMonthlyMap: Map<string, number> | null;
 }
 

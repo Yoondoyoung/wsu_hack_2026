@@ -12,7 +12,6 @@ import {
   Building2,
   SlidersHorizontal,
   DollarSign,
-  Star,
 } from 'lucide-react';
 import type { MapViewMode, OverlayType } from '../../types/map';
 import { glass, colors } from '../../design';
@@ -32,6 +31,7 @@ interface Props {
 
 const MIN_PRICE = 0;
 const MAX_PRICE = 3000000;
+const PRICE_STEP = 50000;
 
 function formatPriceShort(val: number) {
   if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
@@ -108,6 +108,8 @@ export function LeftPanel({
   onMinSchoolRatingChange,
 }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const minPricePct = ((priceRange[0] - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100;
+  const maxPricePct = ((priceRange[1] - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100;
 
   return (
     <div
@@ -288,55 +290,48 @@ export function LeftPanel({
                     <span style={{ color: colors.whiteMuted }}>{formatPriceShort(priceRange[0])}</span>
                     <span style={{ color: colors.whiteMuted }}>{formatPriceShort(priceRange[1])}</span>
                   </div>
-                  <div className="space-y-2.5 px-0.5">
-                    <input
-                      type="range"
-                      min={MIN_PRICE}
-                      max={MAX_PRICE}
-                      step={50000}
-                      value={priceRange[0]}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        onPriceRangeChange([Math.min(v, priceRange[1] - 50000), priceRange[1]]);
+                  <div className="relative h-6 px-0.5">
+                    <div
+                      className="absolute left-0.5 right-0.5 top-1/2 h-[3px] -translate-y-1/2 rounded-full"
+                      style={{ background: colors.whiteSoft }}
+                    />
+                    <div
+                      className="absolute top-1/2 h-[3px] -translate-y-1/2 rounded-full"
+                      style={{
+                        left: `calc(${minPricePct}% + 2px)`,
+                        width: `calc(${Math.max(maxPricePct - minPricePct, 0)}% - 4px)`,
+                        background: colors.cyan,
                       }}
-                      className="w-full"
                     />
                     <input
                       type="range"
                       min={MIN_PRICE}
                       max={MAX_PRICE}
-                      step={50000}
+                      step={PRICE_STEP}
+                      value={priceRange[0]}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        onPriceRangeChange([Math.min(v, priceRange[1] - PRICE_STEP), priceRange[1]]);
+                      }}
+                      className="range-dual-thumb absolute left-0.5 right-0.5 top-1/2 h-[3px] w-auto -translate-y-1/2"
+                      style={{ zIndex: priceRange[0] > MAX_PRICE - PRICE_STEP * 2 ? 5 : 3 }}
+                    />
+                    <input
+                      type="range"
+                      min={MIN_PRICE}
+                      max={MAX_PRICE}
+                      step={PRICE_STEP}
                       value={priceRange[1]}
                       onChange={(e) => {
                         const v = Number(e.target.value);
-                        onPriceRangeChange([priceRange[0], Math.max(v, priceRange[0] + 50000)]);
+                        onPriceRangeChange([priceRange[0], Math.max(v, priceRange[0] + PRICE_STEP)]);
                       }}
-                      className="w-full"
+                      className="range-dual-thumb absolute left-0.5 right-0.5 top-1/2 h-[3px] w-auto -translate-y-1/2"
+                      style={{ zIndex: 4 }}
                     />
                   </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-2.5">
-                    <div className="flex items-center gap-1.5">
-                      <Star size={11} style={{ color: colors.whiteSubtle }} />
-                      <span className="text-[11px]" style={{ color: colors.whiteMuted }}>Min School Rating</span>
-                    </div>
-                    <span className="text-[11px] font-semibold" style={{ color: colors.emerald }}>
-                      {minSchoolRating}/10
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={10}
-                    step={1}
-                    value={minSchoolRating}
-                    onChange={(e) => onMinSchoolRatingChange(Number(e.target.value))}
-                    className="w-full"
-                    style={{ accentColor: colors.emerald }}
-                  />
-                </div>
               </div>
             )}
           </div>

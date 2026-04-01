@@ -108,6 +108,18 @@ input[type='range']::-webkit-slider-thumb:hover {
   box-shadow: 0 0 0 3px rgba(0,200,255,0.22), 0 0 16px rgba(0,200,255,0.7);
 }
 
+/* Dual-thumb range overlay */
+.range-dual-thumb {
+  pointer-events: none;
+  background: transparent !important;
+}
+.range-dual-thumb::-webkit-slider-thumb {
+  pointer-events: auto;
+}
+.range-dual-thumb::-moz-range-thumb {
+  pointer-events: auto;
+}
+
 /* ── Marker z-index ────────────────────────────────────────── */
 .mapboxgl-marker { z-index: 1; }
 .mapboxgl-marker:hover { z-index: 100; }

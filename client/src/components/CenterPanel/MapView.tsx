@@ -231,14 +231,17 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
     setViewState((prev) => ({ ...prev, pitch: viewMode === '3d' ? 60 : 0 }));
   }, [viewMode]);
 
-  // Fly to selected property
+  // Fly to selected property — keep current zoom if already closer than the focus floor (avoid zoom-out).
   useEffect(() => {
     if (selectedId && mapRef.current) {
       const property = properties.find((p) => p.id === selectedId);
       if (property) {
+        const map = mapRef.current.getMap();
+        const currentZoom = map.getZoom();
+        const focusFloor = 15;
         mapRef.current.flyTo({
           center: [property.coordinates[0], property.coordinates[1]],
-          zoom: 15,
+          zoom: Math.max(currentZoom, focusFloor),
           duration: 450,
           essential: true,
           offset: [-185, 0],

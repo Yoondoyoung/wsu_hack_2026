@@ -4,6 +4,7 @@ import type { LayerProps } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { MapViewMode, OverlayType } from '../../types/map';
 import type { Property } from '../../types/property';
+import type { MapPriceMode } from '../../App';
 import { fetchOverlay } from '../../services/api';
 import { formatPrice, formatPriceCompact, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
@@ -67,6 +68,9 @@ interface Props {
   selectedId: string | null;
   onSelectProperty: (id: string) => void;
   onMarkerScreenPosition?: (pos: { x: number; y: number } | null) => void;
+  mapPriceMode: MapPriceMode;
+  onMapPriceModeChange: (mode: MapPriceMode) => void;
+  netMonthlyMap: Map<string, number> | null;
 }
 
 interface CrimePopupData {
@@ -93,14 +97,16 @@ function GlowMarker({
   property,
   selected,
   onClick,
+  label: labelOverride,
 }: {
   property: Property;
   selected: boolean;
   onClick: () => void;
+  label?: string;
 }) {
   const [hovered, setHovered] = useState(false);
   const photo = property.photos?.[0] || property.imageUrl;
-  const label = formatPriceCompact(property.price);
+  const label = labelOverride ?? formatPriceCompact(property.price);
 
   return (
     <div
@@ -204,7 +210,7 @@ function getBoundsFromMap(map: ReturnType<MapRef['getMap']>, padFraction = 0.12)
   };
 }
 
-function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSelectProperty, onMarkerScreenPosition }: Props) {
+function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSelectProperty, onMarkerScreenPosition, mapPriceMode, onMapPriceModeChange, netMonthlyMap }: Props) {
   const mapRef = useRef<MapRef>(null);
   const [overlayData, setOverlayData] = useState<Record<string, GeoJSON.FeatureCollection>>({});
   const overlayDataRef = useRef(overlayData);
@@ -532,35 +538,68 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
         )}
 
         {/* Glowing property markers — viewport-clipped for performance */}
-        {visibleProperties.map((property) => (
-          <Marker
-            key={property.id}
-            longitude={property.coordinates[0]}
-            latitude={property.coordinates[1]}
-            anchor="center"
-          >
-            <GlowMarker
-              property={property}
-              selected={selectedId === property.id}
-              onClick={() => handleMarkerClick(property.id)}
-            />
-          </Marker>
-        ))}
+        {visibleProperties.map((property) => {
+          let markerLabel: string | undefined;
+          if (mapPriceMode === 'netMonthly' && netMonthlyMap) {
+            const nm = netMonthlyMap.get(property.id);
+            if (nm != null) {
+              markerLabel = `$${Math.abs(Math.round(nm)).toLocaleString()}/mo`;
+            }
+          }
+          return (
+            <Marker
+              key={property.id}
+              longitude={property.coordinates[0]}
+              latitude={property.coordinates[1]}
+              anchor="center"
+            >
+              <GlowMarker
+                property={property}
+                selected={selectedId === property.id}
+                onClick={() => handleMarkerClick(property.id)}
+                label={markerLabel}
+              />
+            </Marker>
+          );
+        })}
       </Map>
 
-      {/* Viewport marker count badge */}
-      <div
-        className="absolute top-3 left-3 z-[11] pointer-events-none"
-        style={{
-          ...glass.pill,
-          borderRadius: 8,
-          padding: '5px 10px',
-          fontSize: 11,
-          color: colors.whiteMuted,
-          letterSpacing: '0.02em',
-        }}
-      >
-        {visibleProperties.length} of {properties.length} listings in view
+      {/* Viewport marker count badge + price mode toggle */}
+      <div className="absolute top-3 left-3 z-[11] flex items-center gap-2">
+        <div
+          className="pointer-events-none"
+          style={{
+            ...glass.pill,
+            borderRadius: 8,
+            padding: '5px 10px',
+            fontSize: 11,
+            color: colors.whiteMuted,
+            letterSpacing: '0.02em',
+          }}
+        >
+          {visibleProperties.length} of {properties.length} listings in view
+        </div>
+        <button
+          type="button"
+          onClick={() => onMapPriceModeChange(mapPriceMode === 'listing' ? 'netMonthly' : 'listing')}
+          style={{
+            ...glass.pill,
+            borderRadius: 8,
+            padding: '5px 10px',
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+            color: mapPriceMode === 'netMonthly' ? colors.cyan : colors.whiteMuted,
+            border: `1px solid ${mapPriceMode === 'netMonthly' ? colors.cyan : colors.border}`,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+        >
+          {mapPriceMode === 'netMonthly' ? '$/mo' : 'Price'}
+          <span style={{ color: colors.whiteSubtle, marginLeft: 4, fontSize: 10 }}>
+            {mapPriceMode === 'listing' ? '→ $/mo' : '→ Price'}
+          </span>
+        </button>
       </div>
 
       {/* Building footprints legend — fixed bottom-right of map (left of 360px panel on desktop) */}

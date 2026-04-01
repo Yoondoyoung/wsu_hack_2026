@@ -1,15 +1,16 @@
-import { useEffect, useState, type ElementType, type ReactNode } from 'react';
+import { useEffect, useState, useMemo, type ElementType, type ReactNode } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Bed, Bath, Square, Flame, Snowflake, Car, Wrench, Building,
   GraduationCap, User, Phone, Clock, Eye, Heart, TrendingUp, ExternalLink, ShieldAlert,
-  AlertCircle,
+  AlertCircle, DollarSign, TrendingDown, Lightbulb, ArrowUp,
 } from 'lucide-react';
-import { useMortgagePredictor } from '../../hooks/useMortgagePredictor';
+import { useMortgagePredictor, type ScenarioResult } from '../../hooks/useMortgagePredictor';
 import type { MortgageRequestPayload } from '../../types/mortgage';
 import type { Property } from '../../types/property';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
 import { colors, ctaButtonStyle, getGaugeColor, getGaugeLabel } from '../../design';
+import { calcTCO, TCO_DEFAULTS, type TcoInputs } from '../../utils/tcoCalculator';
 
 interface Props {
   property: Property;
@@ -131,9 +132,141 @@ function CircularGauge({ value }: { value: number }) {
   );
 }
 
+function TcoSlider({ label, value, onChange, min, max, step, format }: {
+  label: string; value: number; onChange: (v: number) => void;
+  min: number; max: number; step: number; format: (v: number) => string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <label className="text-[10px] font-semibold uppercase tracking-widest text-[#8888a8] w-12 flex-shrink-0">{label}</label>
+      <input type="range" min={min} max={max} step={step} value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="flex-1 h-1 accent-[#6366f1] rounded-full cursor-pointer"
+        style={{ accentColor: '#6366f1' }}
+      />
+      <span className="text-xs font-bold text-[#e2e2f0] w-14 text-right tabular-nums">{format(value)}</span>
+    </div>
+  );
+}
+
+function TcoLine({ label, value, accent, negative }: { label: string; value: number; accent?: boolean; negative?: boolean }) {
+  const formatted = `${negative ? '-' : ''}$${Math.abs(value).toLocaleString()}`;
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-[#8888a8]">{label}</span>
+      <span className={`font-semibold tabular-nums ${accent ? 'text-[#6366f1]' : negative ? 'text-emerald-400' : 'text-[#e2e2f0]'}`}>
+        {formatted}
+      </span>
+    </div>
+  );
+}
+
+function TrueMonthlyCostPanel({ property }: { property: Property }) {
+  const [inputs, setInputs] = useState<TcoInputs>(TCO_DEFAULTS);
+  const tco = useMemo(() => calcTCO(property, inputs), [property, inputs]);
+
+  return (
+    <div className="bg-[#141427] border border-[#2d2d4a] rounded-xl p-4">
+      <h3 className="flex items-center gap-2 text-[#e2e2f0] text-sm font-semibold mb-1">
+        <DollarSign size={14} className="text-[#6366f1]" />True Monthly Cost
+      </h3>
+      <p className="text-[#8888a8] text-[10px] mb-3">
+        Data-driven estimate including crime risk, building age, and rental offset.
+      </p>
+
+      <div className="space-y-2 mb-4">
+        <TcoSlider label="Rate" value={inputs.interestRate} min={2} max={12} step={0.125}
+          onChange={(v) => setInputs((p) => ({ ...p, interestRate: v }))}
+          format={(v) => `${v.toFixed(1)}%`} />
+        <TcoSlider label="Down" value={inputs.downPercent} min={0} max={50} step={1}
+          onChange={(v) => setInputs((p) => ({ ...p, downPercent: v }))}
+          format={(v) => `${v}%`} />
+        {property.rentZestimate != null && property.rentZestimate > 0 && (
+          <TcoSlider label="Rent" value={inputs.rentPercent} min={0} max={100} step={5}
+            onChange={(v) => setInputs((p) => ({ ...p, rentPercent: v }))}
+            format={(v) => `${v}%`} />
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <TcoLine label="P&I" value={tco.principalInterest} />
+        <TcoLine label="Property Tax" value={tco.propertyTax} />
+        <TcoLine label={`Insurance${property.crimeRiskLevel === 'high' ? ' (high-risk +25%)' : property.crimeRiskLevel === 'medium' ? ' (+10%)' : ''}`} value={tco.insurance} />
+        <TcoLine label={`Maintenance${property.yearBuilt && property.yearBuilt < 1980 ? ' (pre-1980 +50%)' : ''}`} value={tco.maintenance} />
+        {tco.hoa > 0 && <TcoLine label="HOA" value={tco.hoa} />}
+        {tco.pmi > 0 && <TcoLine label="PMI" value={tco.pmi} />}
+
+        <div className="border-t border-[#2d2d4a] my-1.5" />
+        <TcoLine label="Gross Monthly" value={tco.grossMonthly} accent />
+
+        {tco.rentalIncome > 0 && (
+          <>
+            <TcoLine label="Rental Income" value={tco.rentalIncome} negative />
+            <div className="border-t-2 border-[#6366f1]/40 my-1.5" />
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1 text-xs font-bold text-[#e2e2f0]">
+                <TrendingDown size={12} className="text-emerald-400" />Net Monthly
+              </span>
+              <span className={`text-sm font-black tabular-nums ${tco.netMonthly <= 0 ? 'text-emerald-400' : 'text-[#e2e2f0]'}`}>
+                ${Math.abs(tco.netMonthly).toLocaleString()}/mo
+              </span>
+            </div>
+          </>
+        )}
+        {tco.rentalIncome <= 0 && (
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-xs font-bold text-[#e2e2f0]">Total Monthly</span>
+            <span className="text-sm font-black tabular-nums text-[#e2e2f0]">${tco.grossMonthly.toLocaleString()}/mo</span>
+          </div>
+        )}
+      </div>
+
+      <p className="text-[9px] text-[#555] mt-3 leading-relaxed">
+        Estimates only. Insurance reflects crime-risk surcharge; maintenance reflects building age. Not financial advice.
+      </p>
+    </div>
+  );
+}
+
+function ImprovementTips({ scenarios, baseConfidence }: { scenarios: ScenarioResult[]; baseConfidence: number }) {
+  const positiveTips = scenarios.filter((s) => s.delta > 0);
+  if (positiveTips.length === 0) return null;
+
+  return (
+    <div className="mt-3">
+      <h4 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-[#8888a8] mb-2">
+        <Lightbulb size={12} className="text-amber-400" />How to improve
+      </h4>
+      <div className="space-y-1.5">
+        {positiveTips.slice(0, 2).map((tip) => (
+          <div
+            key={tip.scenario.id}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg border"
+            style={{ background: 'rgba(16,185,129,0.06)', borderColor: 'rgba(16,185,129,0.2)' }}
+          >
+            <ArrowUp size={13} className="text-emerald-400 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-[#e2e2f0]">{tip.scenario.label}</p>
+              <p className="text-[10px] text-[#8888a8]">{tip.scenario.description}</p>
+            </div>
+            <span className="flex-shrink-0 text-xs font-black tabular-nums text-emerald-400">
+              +{tip.delta}%
+            </span>
+          </div>
+        ))}
+      </div>
+      {baseConfidence < 70 && (
+        <p className="text-[9px] text-[#555] mt-2 leading-relaxed">
+          Combine multiple improvements for a stronger application.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function MortgagePredictorPanel({ property }: { property: Property }) {
   const [fields, setFields] = useState(FIELD_DEFAULTS);
-  const { result, loading, error, predict } = useMortgagePredictor();
+  const { result, scenarios, loading, error, predict } = useMortgagePredictor();
 
   useEffect(() => {
     setFields((prev) => ({
@@ -185,7 +318,12 @@ function MortgagePredictorPanel({ property }: { property: Property }) {
         </div>
       )}
 
-      {result && !error && <CircularGauge value={result.confidence} />}
+      {result && !error && (
+        <>
+          <CircularGauge value={result.confidence} />
+          <ImprovementTips scenarios={scenarios} baseConfidence={result.confidence} />
+        </>
+      )}
     </div>
   );
 }
@@ -389,7 +527,8 @@ export function PropertyDetail({ property, onClose }: Props) {
               )}
             </div>
 
-            <div className="xl:col-span-1 xl:sticky xl:top-0 h-fit">
+            <div className="xl:col-span-1 xl:sticky xl:top-0 h-fit space-y-4">
+              <TrueMonthlyCostPanel property={property} />
               <MortgagePredictorPanel property={property} />
             </div>
           </div>

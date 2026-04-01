@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { DashboardLayout } from './components/Layout/DashboardLayout';
 import { LeftPanel } from './components/LeftPanel/LeftPanel';
 import { CenterPanel } from './components/CenterPanel/CenterPanel';
@@ -7,6 +7,9 @@ import { ConnectionLine } from './components/ConnectionLine';
 import { useMapState } from './hooks/useMapState';
 import { useProperties } from './hooks/useProperties';
 import { glass, colors } from './design';
+import { calcTCO, TCO_DEFAULTS } from './utils/tcoCalculator';
+
+export type MapPriceMode = 'listing' | 'netMonthly';
 
 export default function App() {
   const { mapState, setViewMode, toggleOverlay } = useMapState();
@@ -15,6 +18,7 @@ export default function App() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000000]);
   const [minSchoolRating, setMinSchoolRating] = useState(0);
+  const [mapPriceMode, setMapPriceMode] = useState<MapPriceMode>('listing');
 
   /** Refs only — no setState at 60fps (prevents map jitter from full-tree re-renders). */
   const markerPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -48,6 +52,15 @@ export default function App() {
     return true;
   });
 
+  const netMonthlyMap = useMemo(() => {
+    if (mapPriceMode !== 'netMonthly') return null;
+    const map = new Map<string, number>();
+    for (const p of filteredProperties) {
+      map.set(p.id, calcTCO(p, TCO_DEFAULTS).netMonthly);
+    }
+    return map;
+  }, [filteredProperties, mapPriceMode]);
+
   return (
     <DashboardLayout>
       {/* Map — full bleed behind panels */}
@@ -59,6 +72,9 @@ export default function App() {
           selectedId={selectedId}
           onSelectProperty={handleSelectProperty}
           onMarkerScreenPosition={handleMarkerScreenPosition}
+          mapPriceMode={mapPriceMode}
+          onMapPriceModeChange={setMapPriceMode}
+          netMonthlyMap={netMonthlyMap}
         />
       </div>
 

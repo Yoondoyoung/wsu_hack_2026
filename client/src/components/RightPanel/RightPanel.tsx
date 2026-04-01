@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, ChevronDown,
   Bed, Bath, Square,
   Volume2, GraduationCap,
-  ShieldAlert,
+  ShieldAlert, DollarSign, TrendingDown,
 } from 'lucide-react';
 import type { Property } from '../../types/property';
 import { formatPrice, formatSqft } from '../../utils/formatters';
@@ -12,6 +12,7 @@ import {
   glass, colors, TAG_STYLES,
 } from '../../design';
 import { PropertyDetail } from './PropertyDetail';
+import { calcTCO, TCO_DEFAULTS } from '../../utils/tcoCalculator';
 
 /* ─── Props ────────────────────────────────────────────────── */
 interface Props {
@@ -29,6 +30,79 @@ function PropertyBadge({ label, icon: Icon }: { label: string; icon?: React.Elem
     <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: style.bg, color: style.color, border: `1px solid ${style.color}30` }}>
       {Icon && <Icon size={10} />}{label}
     </span>
+  );
+}
+
+/* ─── Compact TCO (inline in accordion card) ──────────────── */
+function CompactTcoSummary({ property }: { property: Property }) {
+  const [open, setOpen] = useState(false);
+  const tco = useMemo(() => calcTCO(property, TCO_DEFAULTS), [property]);
+  const hasRent = (property.rentZestimate ?? 0) > 0;
+
+  return (
+    <div className="mt-3" style={{ borderTop: `1px solid ${colors.border}` }}>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className="flex items-center justify-between w-full py-2"
+      >
+        <span className="flex items-center gap-1.5">
+          <DollarSign size={11} style={{ color: colors.cyan }} />
+          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: colors.whiteMuted }}>
+            Est. Monthly
+          </span>
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="text-xs font-black tabular-nums" style={{ color: hasRent ? colors.cyan : colors.white }}>
+            ${(hasRent ? tco.netMonthly : tco.grossMonthly).toLocaleString()}/mo
+          </span>
+          <ChevronDown size={12} style={{ color: colors.whiteMuted, transform: open ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+        </span>
+      </button>
+      <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 0.2s ease' }}>
+        <div style={{ overflow: 'hidden' }}>
+          <div className="pb-2 space-y-1">
+            <TcoRow label="P&I" value={tco.principalInterest} />
+            <TcoRow label="Tax" value={tco.propertyTax} />
+            <TcoRow label="Insurance" value={tco.insurance} />
+            <TcoRow label="Maintenance" value={tco.maintenance} />
+            {tco.hoa > 0 && <TcoRow label="HOA" value={tco.hoa} />}
+            {tco.pmi > 0 && <TcoRow label="PMI" value={tco.pmi} />}
+            <div style={{ height: 1, background: colors.border, margin: '4px 0' }} />
+            <TcoRow label="Gross" value={tco.grossMonthly} bold />
+            {hasRent && (
+              <>
+                <TcoRow label="Rental Income" value={-tco.rentalIncome} green />
+                <div style={{ height: 1, background: `${colors.cyan}40`, margin: '4px 0' }} />
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color: colors.white }}>
+                    <TrendingDown size={10} style={{ color: '#34d399' }} />Net
+                  </span>
+                  <span className="text-[11px] font-black tabular-nums" style={{ color: tco.netMonthly <= 0 ? '#34d399' : colors.white }}>
+                    ${Math.abs(tco.netMonthly).toLocaleString()}/mo
+                  </span>
+                </div>
+              </>
+            )}
+            <p className="text-[8px] mt-1" style={{ color: colors.whiteSubtle }}>
+              Default: 6.5% rate, 20% down{hasRent ? ', 50% rent offset' : ''}. Open detail for sliders.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TcoRow({ label, value, bold, green }: { label: string; value: number; bold?: boolean; green?: boolean }) {
+  const formatted = value < 0 ? `-$${Math.abs(value).toLocaleString()}` : `$${value.toLocaleString()}`;
+  return (
+    <div className="flex items-center justify-between text-[10px]">
+      <span style={{ color: colors.whiteSubtle }}>{label}</span>
+      <span className={`tabular-nums ${bold ? 'font-bold' : 'font-medium'}`} style={{ color: green ? '#34d399' : colors.whiteMuted }}>
+        {formatted}
+      </span>
+    </div>
   );
 }
 
@@ -160,6 +234,9 @@ function ExpandedDetail({ property, onOpenDetail }: { property: Property; onOpen
           {hasQuietZone && <PropertyBadge label="Quiet Zone" icon={Volume2} />}
           {hasTopSchool && <PropertyBadge label="Top School" icon={GraduationCap} />}
         </div>
+
+        {/* Compact TCO summary */}
+        <CompactTcoSummary property={property} />
 
         {/* Detail link */}
         {property.detailUrl && (

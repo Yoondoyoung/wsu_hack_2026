@@ -3,5 +3,6 @@ dist
 .env
 *.local
 .DS_Store
+.cursor/mcp.json
 server/src/data/UT_Structures.gdb/
 server/src/data/overlays/structures_polygons.full.geojson

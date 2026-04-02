@@ -10,11 +10,13 @@ import type { Property } from '../../types/property';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
 import { colors, ctaButtonStyle, getGaugeColor, getGaugeLabel } from '../../design';
-import { calcTCO, TCO_DEFAULTS, type TcoInputs } from '../../utils/tcoCalculator';
+import { calcTCO, type TcoInputs } from '../../utils/tcoCalculator';
 
 interface Props {
   property: Property;
   onClose: () => void;
+  tcoInputs: TcoInputs;
+  onTcoInputsChange: (next: TcoInputs) => void;
 }
 
 function Section({ title, icon: Icon, children }: { title: string; icon: ElementType; children: ReactNode }) {
@@ -162,8 +164,15 @@ function TcoLine({ label, value, accent, negative }: { label: string; value: num
   );
 }
 
-function TrueMonthlyCostPanel({ property }: { property: Property }) {
-  const [inputs, setInputs] = useState<TcoInputs>(TCO_DEFAULTS);
+function TrueMonthlyCostPanel({
+  property,
+  inputs,
+  onInputsChange,
+}: {
+  property: Property;
+  inputs: TcoInputs;
+  onInputsChange: (next: TcoInputs) => void;
+}) {
   const tco = useMemo(() => calcTCO(property, inputs), [property, inputs]);
 
   return (
@@ -177,14 +186,14 @@ function TrueMonthlyCostPanel({ property }: { property: Property }) {
 
       <div className="space-y-2 mb-4">
         <TcoSlider label="Rate" value={inputs.interestRate} min={2} max={12} step={0.125}
-          onChange={(v) => setInputs((p) => ({ ...p, interestRate: v }))}
+          onChange={(v) => onInputsChange({ ...inputs, interestRate: v })}
           format={(v) => `${v.toFixed(1)}%`} />
         <TcoSlider label="Down" value={inputs.downPercent} min={0} max={50} step={1}
-          onChange={(v) => setInputs((p) => ({ ...p, downPercent: v }))}
+          onChange={(v) => onInputsChange({ ...inputs, downPercent: v })}
           format={(v) => `${v}%`} />
         {property.rentZestimate != null && property.rentZestimate > 0 && (
           <TcoSlider label="Rent" value={inputs.rentPercent} min={0} max={100} step={5}
-            onChange={(v) => setInputs((p) => ({ ...p, rentPercent: v }))}
+            onChange={(v) => onInputsChange({ ...inputs, rentPercent: v })}
             format={(v) => `${v}%`} />
         )}
       </div>
@@ -329,7 +338,7 @@ function MortgagePredictorPanel({ property }: { property: Property }) {
   );
 }
 
-export function PropertyDetail({ property, onClose }: Props) {
+export function PropertyDetail({ property, onClose, tcoInputs, onTcoInputsChange }: Props) {
   const [photoIdx, setPhotoIdx] = useState(0);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const photos = property.photos.length > 0 ? property.photos : [property.imageUrl];
@@ -548,7 +557,11 @@ export function PropertyDetail({ property, onClose }: Props) {
             </div>
 
             <div className="xl:col-span-1 xl:sticky xl:top-0 h-fit space-y-4">
-              <TrueMonthlyCostPanel property={property} />
+              <TrueMonthlyCostPanel
+                property={property}
+                inputs={tcoInputs}
+                onInputsChange={onTcoInputsChange}
+              />
               <MortgagePredictorPanel property={property} />
             </div>
           </div>

@@ -20,7 +20,6 @@ export interface TcoBreakdown {
 
 const UTAH_PROPERTY_TAX_RATE = 0.0058;
 const BASE_INSURANCE_RATE = 0.0035;
-const PMI_ANNUAL_RATE = 0.005;
 
 function monthlyPI(principal: number, annualRate: number, termMonths: number): number {
   if (principal <= 0 || termMonths <= 0) return 0;
@@ -43,6 +42,13 @@ function maintenanceRate(yearBuilt: number): number {
   return 0.015;
 }
 
+function pmiAnnualRate(downPercent: number): number {
+  if (downPercent >= 20) return 0;
+  if (downPercent >= 15) return 0.005;
+  if (downPercent >= 10) return 0.0065;
+  return 0.01;
+}
+
 export const TCO_DEFAULTS: TcoInputs = {
   interestRate: 6.5,
   downPercent: 20,
@@ -60,8 +66,7 @@ export function calcTCO(property: Property, inputs: TcoInputs): TcoBreakdown {
   const insurance = (price * BASE_INSURANCE_RATE) / 12 * insuranceMultiplier(property.crimeRiskLevel);
   const maint = (price * maintenanceRate(property.yearBuilt)) / 12;
   const hoa = property.hoaFee ?? 0;
-  const ltv = loanAmount / price;
-  const pmi = ltv > 0.80 ? (loanAmount * PMI_ANNUAL_RATE) / 12 : 0;
+  const pmi = (loanAmount * pmiAnnualRate(inputs.downPercent)) / 12;
 
   const grossMonthly = principalInterest + propertyTax + insurance + maint + hoa + pmi;
   const rentalIncome = (property.rentZestimate ?? 0) * (inputs.rentPercent / 100);

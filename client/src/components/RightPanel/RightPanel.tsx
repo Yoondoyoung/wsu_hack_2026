@@ -22,6 +22,7 @@ interface Props {
   loading: boolean;
   onCardAnchorChange: (pos: { x: number; y: number } | null) => void;
   tcoInputs: TcoInputs;
+  onTcoInputsChange: (next: TcoInputs) => void;
 }
 
 /* ─── Badge ────────────────────────────────────────────────── */
@@ -340,7 +341,7 @@ function scrollChildToVerticalCenter(container: HTMLElement, child: HTMLElement)
 }
 
 /* ─── Main RightPanel ──────────────────────────────────────── */
-export function RightPanel({ properties, selectedId, onSelectProperty, loading, onCardAnchorChange, tcoInputs }: Props) {
+export function RightPanel({ properties, selectedId, onSelectProperty, loading, onCardAnchorChange, tcoInputs, onTcoInputsChange }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLDivElement>(null);
   const [detailProperty, setDetailProperty] = useState<Property | null>(null);
@@ -458,6 +459,8 @@ export function RightPanel({ properties, selectedId, onSelectProperty, loading, 
         <PropertyDetail
           property={detailProperty}
           onClose={() => setDetailProperty(null)}
+          tcoInputs={tcoInputs}
+          onTcoInputsChange={onTcoInputsChange}
         />
       )}
     </>

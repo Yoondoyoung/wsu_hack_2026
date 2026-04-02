@@ -147,6 +147,7 @@ export default function App() {
           loading={loading}
           onCardAnchorChange={handleCardAnchorChange}
           tcoInputs={tcoInputs}
+          onTcoInputsChange={setTcoInputs}
         />
       </div>
 

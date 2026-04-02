@@ -12,7 +12,7 @@ import {
   glass, colors, TAG_STYLES,
 } from '../../design';
 import { PropertyDetail } from './PropertyDetail';
-import { calcTCO, TCO_DEFAULTS } from '../../utils/tcoCalculator';
+import { calcTCO, type TcoInputs } from '../../utils/tcoCalculator';
 
 /* ─── Props ────────────────────────────────────────────────── */
 interface Props {
@@ -21,6 +21,8 @@ interface Props {
   onSelectProperty: (id: string) => void;
   loading: boolean;
   onCardAnchorChange: (pos: { x: number; y: number } | null) => void;
+  tcoInputs: TcoInputs;
+  onTcoInputsChange: (next: TcoInputs) => void;
   onShowRoute?: (
     from: [number, number],
     to: [number, number],
@@ -48,10 +50,24 @@ function PropertyBadge({ label, icon: Icon }: { label: string; icon?: React.Elem
 }
 
 /* ─── Compact TCO (inline in accordion card) ──────────────── */
-function CompactTcoSummary({ property }: { property: Property }) {
+function CompactTcoSummary({ property, tcoInputs }: { property: Property; tcoInputs: TcoInputs }) {
   const [open, setOpen] = useState(false);
-  const tco = useMemo(() => calcTCO(property, TCO_DEFAULTS), [property]);
-  const hasRent = (property.rentZestimate ?? 0) > 0;
+  const tco = useMemo(() => calcTCO(property, tcoInputs), [property, tcoInputs]);
+  const hasRent = tco.effectiveRentEstimate > 0;
+  const insuranceHint = property.crimeRiskLevel === 'high'
+    ? 'Base +25% (high crime risk)'
+    : property.crimeRiskLevel === 'medium'
+      ? 'Base +10% (medium crime risk)'
+      : 'Base rate applied';
+  const maintenanceHint = property.yearBuilt && property.yearBuilt >= 2020
+    ? '0.5%/yr (newer home)'
+    : property.yearBuilt && property.yearBuilt >= 1980
+      ? '1.0%/yr baseline'
+      : '1.5%/yr (older home)';
+  const pmiHint = tcoInputs.downPercent >= 20
+    ? null
+    : `Applied because down payment is below 20% (currently ${Math.round(tcoInputs.downPercent)}%).`;
+  const rentalIncomeHint = `${Math.round(tcoInputs.rentPercent)}% of $${tco.effectiveRentEstimate.toLocaleString()} expected rent`;
 
   return (
     <div className="mt-3" style={{ borderTop: `1px solid ${colors.border}` }}>
@@ -76,17 +92,17 @@ function CompactTcoSummary({ property }: { property: Property }) {
       <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 0.2s ease' }}>
         <div style={{ overflow: 'hidden' }}>
           <div className="pb-2 space-y-1">
-            <TcoRow label="P&I" value={tco.principalInterest} />
-            <TcoRow label="Tax" value={tco.propertyTax} />
-            <TcoRow label="Insurance" value={tco.insurance} />
-            <TcoRow label="Maintenance" value={tco.maintenance} />
+            <TcoRow label="P&I" detail="Principal + interest payment" value={tco.principalInterest} />
+            <TcoRow label="Tax" detail="Estimated annual property tax / 12" value={tco.propertyTax} />
+            <TcoRow label="Insurance" detail={insuranceHint} value={tco.insurance} />
+            <TcoRow label="Maintenance" detail={maintenanceHint} value={tco.maintenance} />
             {tco.hoa > 0 && <TcoRow label="HOA" value={tco.hoa} />}
-            {tco.pmi > 0 && <TcoRow label="PMI" value={tco.pmi} />}
+            {tco.pmi > 0 && <TcoRow label="PMI" detail={pmiHint ?? undefined} value={tco.pmi} />}
             <div style={{ height: 1, background: colors.border, margin: '4px 0' }} />
-            <TcoRow label="Gross" value={tco.grossMonthly} bold />
+            <TcoRow label="Total Monthly Cost" value={tco.grossMonthly} bold />
             {hasRent && (
               <>
-                <TcoRow label="Rental Income" value={-tco.rentalIncome} green />
+                <TcoRow label="Rental Income" detail={rentalIncomeHint} value={-tco.rentalIncome} green />
                 <div style={{ height: 1, background: `${colors.cyan}40`, margin: '4px 0' }} />
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color: colors.white }}>
@@ -98,8 +114,13 @@ function CompactTcoSummary({ property }: { property: Property }) {
                 </div>
               </>
             )}
+            {tco.usedDefaultRentEstimate && (
+              <p className="text-[8px]" style={{ color: '#f59e0b' }}>
+                Rent estimate missing. Using default estimate (0.65% of home price/month).
+              </p>
+            )}
             <p className="text-[8px] mt-1" style={{ color: colors.whiteSubtle }}>
-              Default: 6.5% rate, 20% down{hasRent ? ', 50% rent offset' : ''}. Open detail for sliders.
+              Inputs: {tcoInputs.interestRate.toFixed(2)}% rate, {Math.round(tcoInputs.downPercent)}% down{hasRent ? `, ${Math.round(tcoInputs.rentPercent)}% rent offset` : ''}.
             </p>
           </div>
         </div>
@@ -108,11 +129,26 @@ function CompactTcoSummary({ property }: { property: Property }) {
   );
 }
 
-function TcoRow({ label, value, bold, green }: { label: string; value: number; bold?: boolean; green?: boolean }) {
+function TcoRow({
+  label,
+  detail,
+  value,
+  bold,
+  green,
+}: {
+  label: string;
+  detail?: string;
+  value: number;
+  bold?: boolean;
+  green?: boolean;
+}) {
   const formatted = value < 0 ? `-$${Math.abs(value).toLocaleString()}` : `$${value.toLocaleString()}`;
   return (
     <div className="flex items-center justify-between text-[10px]">
-      <span style={{ color: colors.whiteSubtle }}>{label}</span>
+      <span className="flex flex-col" style={{ color: colors.whiteSubtle }}>
+        <span>{label}</span>
+        {detail && <span className="text-[8px]" style={{ color: colors.whiteSubtle }}>{detail}</span>}
+      </span>
       <span className={`tabular-nums ${bold ? 'font-bold' : 'font-medium'}`} style={{ color: green ? '#34d399' : colors.whiteMuted }}>
         {formatted}
       </span>
@@ -121,7 +157,15 @@ function TcoRow({ label, value, bold, green }: { label: string; value: number; b
 }
 
 /* ─── Expanded Detail (inside accordion) ──────────────────── */
-function ExpandedDetail({ property, onOpenDetail }: { property: Property; onOpenDetail: (property: Property) => void }) {
+function ExpandedDetail({
+  property,
+  onOpenDetail,
+  tcoInputs,
+}: {
+  property: Property;
+  onOpenDetail: (property: Property) => void;
+  tcoInputs: TcoInputs;
+}) {
   const [photoIdx, setPhotoIdx] = useState(0);
 
   useEffect(() => { setPhotoIdx(0); }, [property.id]);
@@ -250,7 +294,7 @@ function ExpandedDetail({ property, onOpenDetail }: { property: Property; onOpen
         </div>
 
         {/* Compact TCO summary */}
-        <CompactTcoSummary property={property} />
+        <CompactTcoSummary property={property} tcoInputs={tcoInputs} />
 
         {/* Detail link */}
         {property.detailUrl && (
@@ -276,7 +320,7 @@ function ExpandedDetail({ property, onOpenDetail }: { property: Property; onOpen
 
 /* ─── Compact Card ─────────────────────────────────────────── */
 function CompactCard({
-  property, selected, dimmed, floating, onClick, onOpenDetail,
+  property, selected, dimmed, floating, onClick, onOpenDetail, tcoInputs,
 }: {
   property: Property;
   selected: boolean;
@@ -284,6 +328,7 @@ function CompactCard({
   floating: boolean;
   onClick: () => void;
   onOpenDetail: (property: Property) => void;
+  tcoInputs: TcoInputs;
 }) {
   const photo = property.photos?.[0] || property.imageUrl;
 
@@ -342,7 +387,7 @@ function CompactCard({
       {/* Accordion body */}
       <div style={{ display: 'grid', gridTemplateRows: selected ? '1fr' : '0fr', transition: 'grid-template-rows 0.2s ease' }}>
         <div style={{ overflow: 'hidden' }}>
-          {selected && <ExpandedDetail property={property} onOpenDetail={onOpenDetail} />}
+          {selected && <ExpandedDetail property={property} onOpenDetail={onOpenDetail} tcoInputs={tcoInputs} />}
         </div>
       </div>
 
@@ -365,7 +410,18 @@ function scrollChildToVerticalCenter(container: HTMLElement, child: HTMLElement)
 }
 
 /* ─── Main RightPanel ──────────────────────────────────────── */
-export function RightPanel({ properties, selectedId, onSelectProperty, loading, onCardAnchorChange, onShowRoute, reopenTrigger, onReopenHandled, floatingCardIds }: Props) {
+export function RightPanel({
+  properties,
+  selectedId,
+  onSelectProperty,
+  loading,
+  onCardAnchorChange,
+  tcoInputs,
+  onTcoInputsChange,
+  onShowRoute,
+  reopenTrigger,
+  onReopenHandled, floatingCardIds,
+}: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLDivElement>(null);
   const [detailProperty, setDetailProperty] = useState<Property | null>(null);
@@ -475,6 +531,7 @@ export function RightPanel({ properties, selectedId, onSelectProperty, loading, 
                   floating={floatingCardIds?.has(p.id) ?? false}
                   onClick={() => onSelectProperty(p.id)}
                   onOpenDetail={setDetailProperty}
+                  tcoInputs={tcoInputs}
                 />
               </div>
             );
@@ -492,6 +549,8 @@ export function RightPanel({ properties, selectedId, onSelectProperty, loading, 
         <PropertyDetail
           property={detailProperty}
           onClose={() => setDetailProperty(null)}
+          tcoInputs={tcoInputs}
+          onTcoInputsChange={onTcoInputsChange}
           onShowRoute={onShowRoute}
         />
       )}

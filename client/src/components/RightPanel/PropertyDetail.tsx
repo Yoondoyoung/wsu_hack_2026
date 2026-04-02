@@ -11,7 +11,7 @@ import type { Property } from '../../types/property';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
 import { colors, ctaButtonStyle, getGaugeColor, getGaugeLabel } from '../../design';
-import { calcTCO, type TcoInputs } from '../../utils/tcoCalculator';
+import { calcTCO, homeAgeYears, type TcoInputs } from '../../utils/tcoCalculator';
 
 interface Props {
   property: Property;
@@ -177,9 +177,9 @@ function TcoLine({
   const formatted = `${negative ? '-' : ''}$${Math.abs(value).toLocaleString()}`;
   return (
     <div className="flex items-center justify-between text-xs">
-      <span className="flex flex-col text-[#8888a8]">
+      <span className="flex flex-col text-[#e5e7eb]">
         <span>{label}</span>
-        {detail && <span className="text-[9px] text-[#666680]">{detail}</span>}
+        {detail && <span className="text-[9px] text-[#f1f5f9]">{detail}</span>}
       </span>
       <span className={`font-semibold tabular-nums ${accent ? 'text-[#6366f1]' : negative ? 'text-emerald-400' : 'text-[#e2e2f0]'}`}>
         {formatted}
@@ -203,11 +203,12 @@ function TrueMonthlyCostPanel({
     : property.crimeRiskLevel === 'medium'
       ? 'Base +10% (medium crime risk)'
       : 'Base rate applied';
-  const maintenanceHint = property.yearBuilt && property.yearBuilt >= 2020
-    ? '0.5%/yr (newer home)'
-    : property.yearBuilt && property.yearBuilt >= 1980
-      ? '1.0%/yr baseline'
-      : '1.5%/yr (older home)';
+  const homeAge = homeAgeYears(property.yearBuilt);
+  const maintenanceHint = tco.usedMaintenanceOverride
+    ? `Manual $${tco.maintenance.toLocaleString()}/mo`
+    : homeAge == null
+    ? `Home age unknown -> auto $${tco.maintenanceAuto.toLocaleString()}/mo`
+    : `${homeAge}y old home -> auto $${tco.maintenanceAuto.toLocaleString()}/mo`;
   const pmiHint = inputs.downPercent >= 20
     ? undefined
     : `Applied because down payment is below 20% (currently ${Math.round(inputs.downPercent)}%).`;
@@ -240,7 +241,46 @@ function TrueMonthlyCostPanel({
         <TcoLine label="P&I" detail="Principal + interest payment" value={tco.principalInterest} />
         <TcoLine label="Property Tax" detail="Estimated annual property tax / 12" value={tco.propertyTax} />
         <TcoLine label="Insurance" detail={insuranceHint} value={tco.insurance} />
-        <TcoLine label="Maintenance" detail={maintenanceHint} value={tco.maintenance} />
+        <div className="flex items-center justify-between text-xs">
+          <span className="flex flex-col text-[#e5e7eb]">
+            <span className="flex items-center gap-2">
+              <span>Maintenance</span>
+              <button
+                type="button"
+                onClick={() => onInputsChange({
+                  ...inputs,
+                  maintenanceMonthlyOverride: inputs.maintenanceMonthlyOverride == null ? tco.maintenanceAuto : null,
+                })}
+                className="px-2 py-0.5 rounded border text-[9px] font-semibold"
+                style={{
+                  color: '#e2e2f0',
+                  borderColor: '#2d2d4a',
+                  background: inputs.maintenanceMonthlyOverride == null ? '#0f0f1a' : '#6366f11a',
+                }}
+              >
+                {inputs.maintenanceMonthlyOverride == null ? 'Auto' : 'Manual'}
+              </button>
+            </span>
+            <span className="text-[9px] text-[#f1f5f9]">{maintenanceHint}</span>
+          </span>
+          {inputs.maintenanceMonthlyOverride != null ? (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-[#8888a8]">$</span>
+              <input
+                type="number"
+                min={0}
+                step={25}
+                value={Math.round(inputs.maintenanceMonthlyOverride)}
+                onChange={(e) => onInputsChange({ ...inputs, maintenanceMonthlyOverride: Number(e.target.value) || 0 })}
+                className="w-24 bg-[#0f0f1a] border border-[#2d2d4a] rounded px-2 py-0.5 text-xs text-right text-[#e2e2f0] focus:outline-none"
+              />
+            </div>
+          ) : (
+            <span className="font-semibold tabular-nums text-[#e2e2f0]">
+              ${tco.maintenance.toLocaleString()}
+            </span>
+          )}
+        </div>
         {tco.hoa > 0 && <TcoLine label="HOA" value={tco.hoa} />}
         {tco.pmi > 0 && <TcoLine label="PMI" detail={pmiHint} value={tco.pmi} />}
 

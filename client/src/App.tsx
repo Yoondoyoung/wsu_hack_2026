@@ -6,6 +6,7 @@ import { RightPanel } from './components/RightPanel/RightPanel';
 import { ConnectionLine } from './components/ConnectionLine';
 import { FloatingPropertyCard } from './components/FloatingPropertyCard';
 import { PropertyCompareView, COMPARE_LABEL_W, COMPARE_COL_W } from './components/PropertyCompareView';
+import { ChatAssistant } from './components/ChatAssistant/ChatAssistant';
 import { useMapState } from './hooks/useMapState';
 import { useProperties } from './hooks/useProperties';
 import { glass, colors } from './design';
@@ -391,6 +392,8 @@ export default function App() {
           );
         })()}
       </div>
+
+      <ChatAssistant />
 
     </DashboardLayout>
   );

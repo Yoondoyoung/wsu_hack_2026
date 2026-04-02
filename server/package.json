@@ -9,8 +9,10 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
+    "dotenv": "^17.4.0",
     "express": "^4.21.0",
     "geojson-vt": "^4.0.2",
+    "openai": "^6.33.0",
     "proj4": "^2.20.4",
     "vt-pbf": "^3.1.3"
   },

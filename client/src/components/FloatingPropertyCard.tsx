@@ -10,7 +10,10 @@ interface Props {
   property: Property;
   x: number;
   y: number;
+  /** True when near another floating card (will snap to create compare) */
   snapTarget: boolean;
+  /** True when near an existing compare view (will be added to it) */
+  snapToCompare: boolean;
   onMove: (id: string, x: number, y: number) => void;
   onSnapRelease: (id: string, x: number, y: number) => void;
   onClose: (id: string) => void;
@@ -22,7 +25,7 @@ const CRIME_COLORS: Record<string, string> = {
   high: '#f87171',
 };
 
-export function FloatingPropertyCard({ property, x, y, snapTarget, onMove, onSnapRelease, onClose }: Props) {
+export function FloatingPropertyCard({ property, x, y, snapTarget, snapToCompare, onMove, onSnapRelease, onClose }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const dragOffset = useRef({ dx: 0, dy: 0 });
   const tco = calcTCO(property, TCO_DEFAULTS);
@@ -50,6 +53,8 @@ export function FloatingPropertyCard({ property, x, y, snapTarget, onMove, onSna
     onSnapRelease(property.id, nx, ny);
   }
 
+  const isSnapping = snapTarget || snapToCompare;
+  const snapColor  = snapToCompare ? '#a5b4fc' : colors.cyan;  // indigo for compare, cyan for new pair
   const crimeColor = CRIME_COLORS[property.crimeRiskLevel] ?? colors.whiteMuted;
 
   return (
@@ -66,10 +71,10 @@ export function FloatingPropertyCard({ property, x, y, snapTarget, onMove, onSna
         ...glass.panelDense,
         borderRadius: 14,
         overflow: 'hidden',
-        boxShadow: snapTarget
-          ? `0 0 0 2px ${colors.cyan}, 0 0 24px ${colors.cyan}60, 0 8px 32px rgba(0,0,0,0.6)`
+        boxShadow: isSnapping
+          ? `0 0 0 2px ${snapColor}, 0 0 24px ${snapColor}60, 0 8px 32px rgba(0,0,0,0.6)`
           : '0 8px 32px rgba(0,0,0,0.55)',
-        border: snapTarget ? `1.5px solid ${colors.cyan}` : `1px solid ${colors.border}`,
+        border: isSnapping ? `1.5px solid ${snapColor}` : `1px solid ${colors.border}`,
       }}
     >
       {/* Drag handle */}
@@ -140,10 +145,10 @@ export function FloatingPropertyCard({ property, x, y, snapTarget, onMove, onSna
           </span>
         </div>
 
-        {snapTarget && (
-          <div style={{ marginTop: 2, padding: '4px 8px', borderRadius: 8, background: `${colors.cyan}15`, border: `1px solid ${colors.cyan}40`, textAlign: 'center' }}>
-            <span style={{ fontSize: 9, color: colors.cyan, fontWeight: 700, letterSpacing: '0.06em' }}>
-              RELEASE TO COMPARE
+        {(snapTarget || snapToCompare) && (
+          <div style={{ marginTop: 2, padding: '4px 8px', borderRadius: 8, background: `${snapColor}15`, border: `1px solid ${snapColor}40`, textAlign: 'center' }}>
+            <span style={{ fontSize: 9, color: snapColor, fontWeight: 700, letterSpacing: '0.06em' }}>
+              {snapToCompare ? 'RELEASE TO ADD TO COMPARE' : 'RELEASE TO COMPARE'}
             </span>
           </div>
         )}

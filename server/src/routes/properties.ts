@@ -435,8 +435,10 @@ propertiesRouter.get('/overlays/:type', (req, res) => {
   if (type === 'grocery') {
     try {
       const path = join(__dirname, '..', 'data', 'groceryList', 'slcGrocery.geojson');
-      const data = JSON.parse(readFileSync(path, 'utf-8'));
-      res.json(data);
+      const raw = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
+      // RFC 7946 / Mapbox: omit legacy `crs` member from huge file
+      const { crs: _omit, ...geo } = raw;
+      res.json(geo);
       return;
     } catch (e) {
       console.error('Failed to load grocery GeoJSON:', e);

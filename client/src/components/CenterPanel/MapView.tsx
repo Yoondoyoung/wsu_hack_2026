@@ -30,6 +30,12 @@ const MAP_STYLES: Record<MapViewMode, string> = {
   '3d': 'mapbox://styles/mapbox/dark-v11',
 };
 
+/** Large statewide file: load via URL so Mapbox fetches/parses off the React state path (avoids freezing other layers). */
+const GROCERY_GEOJSON_URL =
+  typeof window !== 'undefined'
+    ? `${window.location.origin}/api/properties/overlays/grocery`
+    : '/api/properties/overlays/grocery';
+
 // Heatmap color ramps aligned with design.ts
 const OVERLAY_COLORS: Record<OverlayType, string[]> = {
   crime:      ['rgba(0,0,0,0)', '#7f1d1d', '#ff4060', colors.red],
@@ -292,6 +298,8 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
   // the effect on every fetch and could block or thrash layers). Skip if already cached in ref.
   useEffect(() => {
     activeOverlays.forEach((overlay) => {
+      if (overlay === 'grocery') return; // URL-backed source; do not pull multi‑MB JSON into React state
+      if (overlay === 'structures') return; // vector tiles only; no overview GeoJSON dots
       if (overlayDataRef.current[overlay]) return;
       fetchOverlay(overlay)
         .then((data) => {
@@ -432,75 +440,59 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
           </Source>
         )}
 
-        {/* Structures vector tiles */}
+        {/* Structures: vector tiles only (no zoomed-out overview dots) */}
         {activeOverlays.has('structures') && (
-          <>
-            {overlayData.structures && (
-              <Source id="source-structures-overview" type="geojson" data={overlayData.structures}>
-                <Layer
-                  id="structures-overview-circles"
-                  type="circle"
-                  maxzoom={14}
-                  paint={{
-                    'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 1.2, 12, 1.8, 14, 2.4],
-                    'circle-color': '#22d3ee',
-                    'circle-opacity': 0.35,
-                  }}
-                />
-              </Source>
-            )}
-            <Source
-              id="source-structures-vt"
-              type="vector"
-              tiles={[structuresTileUrl]}
-              minzoom={10}
-              maxzoom={18}
-            >
-              <Layer
-                id="structures-fill"
-                type="fill"
-                source="source-structures-vt"
-                source-layer="structures"
-                minzoom={13}
-                paint={{
-                  'fill-color': [
-                    'match', ['get', 'OCC_CLS'],
-                    'Residential', '#22c55e',
-                    'Government', '#3b82f6',
-                    'Commercial', '#ef4444',
-                    'Education', '#facc15',
-                    'Industrial', '#6b7280',
-                    '#4b5563',
-                  ],
-                  'fill-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0.04, 15, 0.1, 18, 0.18],
-                }}
-              />
-              <Layer
-                id="structures-outline"
-                type="line"
-                source="source-structures-vt"
-                source-layer="structures"
-                minzoom={14}
-                paint={{
-                  'line-color': [
-                    'match', ['get', 'OCC_CLS'],
-                    'Residential', '#15803d',
-                    'Government', '#1d4ed8',
-                    'Commercial', '#b91c1c',
-                    'Education', '#ca8a04',
-                    'Industrial', '#374151',
-                    '#1f2937',
-                  ],
-                  'line-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0.25, 16, 0.6, 19, 0.9],
-                  'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.4, 16, 0.9, 19, 1.6],
-                }}
-              />
-            </Source>
-          </>
+          <Source
+            id="source-structures-vt"
+            type="vector"
+            tiles={[structuresTileUrl]}
+            minzoom={10}
+            maxzoom={18}
+          >
+            <Layer
+              id="structures-fill"
+              type="fill"
+              source="source-structures-vt"
+              source-layer="structures"
+              minzoom={13}
+              paint={{
+                'fill-color': [
+                  'match', ['get', 'OCC_CLS'],
+                  'Residential', '#22c55e',
+                  'Government', '#3b82f6',
+                  'Commercial', '#ef4444',
+                  'Education', '#facc15',
+                  'Industrial', '#6b7280',
+                  '#4b5563',
+                ],
+                'fill-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0.04, 15, 0.1, 18, 0.18],
+              }}
+            />
+            <Layer
+              id="structures-outline"
+              type="line"
+              source="source-structures-vt"
+              source-layer="structures"
+              minzoom={14}
+              paint={{
+                'line-color': [
+                  'match', ['get', 'OCC_CLS'],
+                  'Residential', '#15803d',
+                  'Government', '#1d4ed8',
+                  'Commercial', '#b91c1c',
+                  'Education', '#ca8a04',
+                  'Industrial', '#374151',
+                  '#1f2937',
+                ],
+                'line-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0.25, 16, 0.6, 19, 0.9],
+                'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.4, 16, 0.9, 19, 1.6],
+              }}
+            />
+          </Source>
         )}
 
-        {activeOverlays.has('grocery') && overlayData.grocery && (
-          <Source id="source-grocery" type="geojson" data={overlayData.grocery}>
+        {activeOverlays.has('grocery') && (
+          <Source id="source-grocery" type="geojson" data={GROCERY_GEOJSON_URL}>
             <Layer
               id="grocery-points"
               type="circle"

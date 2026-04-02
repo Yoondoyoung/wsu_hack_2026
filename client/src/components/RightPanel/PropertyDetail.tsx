@@ -152,11 +152,26 @@ function TcoSlider({ label, value, onChange, min, max, step, format }: {
   );
 }
 
-function TcoLine({ label, value, accent, negative }: { label: string; value: number; accent?: boolean; negative?: boolean }) {
+function TcoLine({
+  label,
+  detail,
+  value,
+  accent,
+  negative,
+}: {
+  label: string;
+  detail?: string;
+  value: number;
+  accent?: boolean;
+  negative?: boolean;
+}) {
   const formatted = `${negative ? '-' : ''}$${Math.abs(value).toLocaleString()}`;
   return (
     <div className="flex items-center justify-between text-xs">
-      <span className="text-[#8888a8]">{label}</span>
+      <span className="flex flex-col text-[#8888a8]">
+        <span>{label}</span>
+        {detail && <span className="text-[9px] text-[#666680]">{detail}</span>}
+      </span>
       <span className={`font-semibold tabular-nums ${accent ? 'text-[#6366f1]' : negative ? 'text-emerald-400' : 'text-[#e2e2f0]'}`}>
         {formatted}
       </span>
@@ -174,6 +189,20 @@ function TrueMonthlyCostPanel({
   onInputsChange: (next: TcoInputs) => void;
 }) {
   const tco = useMemo(() => calcTCO(property, inputs), [property, inputs]);
+  const insuranceHint = property.crimeRiskLevel === 'high'
+    ? 'Base +25% (high crime risk)'
+    : property.crimeRiskLevel === 'medium'
+      ? 'Base +10% (medium crime risk)'
+      : 'Base rate applied';
+  const maintenanceHint = property.yearBuilt && property.yearBuilt >= 2020
+    ? '0.5%/yr (newer home)'
+    : property.yearBuilt && property.yearBuilt >= 1980
+      ? '1.0%/yr baseline'
+      : '1.5%/yr (older home)';
+  const pmiHint = inputs.downPercent >= 20
+    ? undefined
+    : `Applied because down payment is below 20% (currently ${Math.round(inputs.downPercent)}%).`;
+  const rentalIncomeHint = `${Math.round(inputs.rentPercent)}% of $${tco.effectiveRentEstimate.toLocaleString()} expected rent`;
 
   return (
     <div className="bg-[#141427] border border-[#2d2d4a] rounded-xl p-4">
@@ -191,7 +220,7 @@ function TrueMonthlyCostPanel({
         <TcoSlider label="Down" value={inputs.downPercent} min={0} max={50} step={1}
           onChange={(v) => onInputsChange({ ...inputs, downPercent: v })}
           format={(v) => `${v}%`} />
-        {property.rentZestimate != null && property.rentZestimate > 0 && (
+        {tco.effectiveRentEstimate > 0 && (
           <TcoSlider label="Rent" value={inputs.rentPercent} min={0} max={100} step={5}
             onChange={(v) => onInputsChange({ ...inputs, rentPercent: v })}
             format={(v) => `${v}%`} />
@@ -199,19 +228,19 @@ function TrueMonthlyCostPanel({
       </div>
 
       <div className="space-y-1.5">
-        <TcoLine label="P&I" value={tco.principalInterest} />
-        <TcoLine label="Property Tax" value={tco.propertyTax} />
-        <TcoLine label={`Insurance${property.crimeRiskLevel === 'high' ? ' (high-risk +25%)' : property.crimeRiskLevel === 'medium' ? ' (+10%)' : ''}`} value={tco.insurance} />
-        <TcoLine label={`Maintenance${property.yearBuilt && property.yearBuilt < 1980 ? ' (pre-1980 +50%)' : ''}`} value={tco.maintenance} />
+        <TcoLine label="P&I" detail="Principal + interest payment" value={tco.principalInterest} />
+        <TcoLine label="Property Tax" detail="Estimated annual property tax / 12" value={tco.propertyTax} />
+        <TcoLine label="Insurance" detail={insuranceHint} value={tco.insurance} />
+        <TcoLine label="Maintenance" detail={maintenanceHint} value={tco.maintenance} />
         {tco.hoa > 0 && <TcoLine label="HOA" value={tco.hoa} />}
-        {tco.pmi > 0 && <TcoLine label="PMI" value={tco.pmi} />}
+        {tco.pmi > 0 && <TcoLine label="PMI" detail={pmiHint} value={tco.pmi} />}
 
         <div className="border-t border-[#2d2d4a] my-1.5" />
-        <TcoLine label="Gross Monthly" value={tco.grossMonthly} accent />
+        <TcoLine label="Total Monthly Cost" value={tco.grossMonthly} accent />
 
         {tco.rentalIncome > 0 && (
           <>
-            <TcoLine label="Rental Income" value={tco.rentalIncome} negative />
+            <TcoLine label="Rental Income" detail={rentalIncomeHint} value={tco.rentalIncome} negative />
             <div className="border-t-2 border-[#6366f1]/40 my-1.5" />
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1 text-xs font-bold text-[#e2e2f0]">
@@ -228,6 +257,11 @@ function TrueMonthlyCostPanel({
             <span className="text-xs font-bold text-[#e2e2f0]">Total Monthly</span>
             <span className="text-sm font-black tabular-nums text-[#e2e2f0]">${tco.grossMonthly.toLocaleString()}/mo</span>
           </div>
+        )}
+        {tco.usedDefaultRentEstimate && (
+          <p className="text-[10px] text-amber-400 mt-2">
+            Rent estimate missing. Using default estimate (0.65% of home price/month).
+          </p>
         )}
       </div>
 

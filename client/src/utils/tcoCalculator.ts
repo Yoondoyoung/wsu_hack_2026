@@ -14,12 +14,15 @@ export interface TcoBreakdown {
   hoa: number;
   pmi: number;
   grossMonthly: number;
+  effectiveRentEstimate: number;
+  usedDefaultRentEstimate: boolean;
   rentalIncome: number;
   netMonthly: number;
 }
 
 const UTAH_PROPERTY_TAX_RATE = 0.0058;
 const BASE_INSURANCE_RATE = 0.0035;
+const DEFAULT_RENT_TO_PRICE_MONTHLY_RATE = 0.0065; // 0.65% of home price per month
 
 function monthlyPI(principal: number, annualRate: number, termMonths: number): number {
   if (principal <= 0 || termMonths <= 0) return 0;
@@ -60,6 +63,10 @@ export function calcTCO(property: Property, inputs: TcoInputs): TcoBreakdown {
   const downAmount = price * (inputs.downPercent / 100);
   const loanAmount = price - downAmount;
   const termMonths = 360;
+  const hasRentEstimate = property.rentZestimate != null && property.rentZestimate > 0;
+  const effectiveRentEstimateRaw = hasRentEstimate
+    ? property.rentZestimate as number
+    : price * DEFAULT_RENT_TO_PRICE_MONTHLY_RATE;
 
   const principalInterest = monthlyPI(loanAmount, inputs.interestRate, termMonths);
   const propertyTax = (price * UTAH_PROPERTY_TAX_RATE) / 12;
@@ -69,7 +76,7 @@ export function calcTCO(property: Property, inputs: TcoInputs): TcoBreakdown {
   const pmi = (loanAmount * pmiAnnualRate(inputs.downPercent)) / 12;
 
   const grossMonthly = principalInterest + propertyTax + insurance + maint + hoa + pmi;
-  const rentalIncome = (property.rentZestimate ?? 0) * (inputs.rentPercent / 100);
+  const rentalIncome = effectiveRentEstimateRaw * (inputs.rentPercent / 100);
   const netMonthly = grossMonthly - rentalIncome;
 
   return {
@@ -80,6 +87,8 @@ export function calcTCO(property: Property, inputs: TcoInputs): TcoBreakdown {
     hoa: Math.round(hoa),
     pmi: Math.round(pmi),
     grossMonthly: Math.round(grossMonthly),
+    effectiveRentEstimate: Math.round(effectiveRentEstimateRaw),
+    usedDefaultRentEstimate: !hasRentEstimate,
     rentalIncome: Math.round(rentalIncome),
     netMonthly: Math.round(netMonthly),
   };

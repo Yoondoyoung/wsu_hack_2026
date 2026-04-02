@@ -142,14 +142,55 @@ function enrichWithCrimeRisk(listings: any[]): any[] {
   });
 }
 
-function extractPhotoUrls(listing: any): string[] {
-  const detailImages = Array.isArray(listing.detail?.images) ? listing.detail.images : [];
-  const preferredDetailImages = detailImages.filter(
-    (img: unknown) => typeof img === 'string' && (img.includes('-p_f.') || img.includes('-p_d.') || img.includes('-cc_ft_768.'))
-  ) as string[];
+function photoKeyFromUrl(url: string): string | null {
+  const match = url.match(/\/fp\/([^-/.]+)-/);
+  return match ? match[1] : null;
+}
 
-  if (preferredDetailImages.length > 0) {
-    return Array.from(new Set(preferredDetailImages)).slice(0, 20);
+function photoQualityScore(url: string): number {
+  const ccFt = url.match(/-cc_ft_(\d+)\./);
+  if (ccFt) return parseInt(ccFt[1]!, 10);
+
+  const uncropped = url.match(/-uncropped_scaled_within_(\d+)_\d+\./);
+  if (uncropped) return parseInt(uncropped[1]!, 10) + 100;
+
+  if (url.includes('-o_a.')) return 5000;
+  if (url.includes('-p_f.')) return 4500;
+  if (url.includes('-p_d.')) return 4300;
+  if (url.includes('-d_d.')) return 4200;
+  return 0;
+}
+
+function bestPhotosByKey(urls: string[]): string[] {
+  const bestByKey = new Map<string, { url: string; score: number; firstIndex: number }>();
+
+  urls.forEach((url, index) => {
+    const key = photoKeyFromUrl(url) ?? `url:${url}`;
+    const score = photoQualityScore(url);
+    const existing = bestByKey.get(key);
+
+    if (!existing) {
+      bestByKey.set(key, { url, score, firstIndex: index });
+      return;
+    }
+
+    if (score > existing.score) {
+      bestByKey.set(key, { url, score, firstIndex: existing.firstIndex });
+    }
+  });
+
+  return Array.from(bestByKey.values())
+    .sort((a, b) => a.firstIndex - b.firstIndex)
+    .map((item) => item.url);
+}
+
+function extractPhotoUrls(listing: any): string[] {
+  const detailImages = (Array.isArray(listing.detail?.images) ? listing.detail.images : []).filter(
+    (img: unknown): img is string => typeof img === 'string' && img.includes('/fp/')
+  );
+
+  if (detailImages.length > 0) {
+    return bestPhotosByKey(detailImages).slice(0, 20);
   }
 
   const carouselPhotoData = Array.isArray(listing.raw?.carouselPhotosComposable?.photoData)

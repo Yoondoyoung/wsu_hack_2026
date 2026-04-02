@@ -387,7 +387,7 @@ function MortgagePredictorPanel({ property }: { property: Property }) {
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2 pt-5">
           <MoneyInput label="Annual Income" value={fields.annualIncome} onChange={set('annualIncome')} />
-          <MoneyInput label="Total Debt" value={fields.totalDebt} onChange={set('totalDebt')} />
+          <MoneyInput label="Current Other Debt" value={fields.totalDebt} onChange={set('totalDebt')} />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
           <MoneyInput label="Loan Amount" value={fields.loanAmount} onChange={set('loanAmount')} />

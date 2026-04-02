@@ -7,7 +7,7 @@ import { ConnectionLine } from './components/ConnectionLine';
 import { useMapState } from './hooks/useMapState';
 import { useProperties } from './hooks/useProperties';
 import { glass, colors } from './design';
-import { calcTCO, TCO_DEFAULTS } from './utils/tcoCalculator';
+import { calcTCO, TCO_DEFAULTS, type TcoInputs } from './utils/tcoCalculator';
 
 export type MapPriceMode = 'listing' | 'netMonthly';
 
@@ -16,9 +16,10 @@ export default function App() {
   const { properties, loading } = useProperties();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 5000000]);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 3000000]);
   const [minSchoolRating, setMinSchoolRating] = useState(0);
   const [mapPriceMode, setMapPriceMode] = useState<MapPriceMode>('listing');
+  const [tcoInputs, setTcoInputs] = useState<TcoInputs>(TCO_DEFAULTS);
   const [minBeds, setMinBeds] = useState(0);
   const [minBaths, setMinBaths] = useState(0);
 
@@ -60,10 +61,10 @@ export default function App() {
     if (mapPriceMode !== 'netMonthly') return null;
     const map = new Map<string, number>();
     for (const p of filteredProperties) {
-      map.set(p.id, calcTCO(p, TCO_DEFAULTS).netMonthly);
+      map.set(p.id, calcTCO(p, tcoInputs).netMonthly);
     }
     return map;
-  }, [filteredProperties, mapPriceMode]);
+  }, [filteredProperties, mapPriceMode, tcoInputs]);
 
   return (
     <DashboardLayout>
@@ -132,6 +133,8 @@ export default function App() {
           onMinBedsChange={setMinBeds}
           minBaths={minBaths}
           onMinBathsChange={setMinBaths}
+          tcoInputs={tcoInputs}
+          onTcoInputsChange={setTcoInputs}
         />
       </div>
 
@@ -143,6 +146,7 @@ export default function App() {
           onSelectProperty={handleSelectProperty}
           loading={loading}
           onCardAnchorChange={handleCardAnchorChange}
+          tcoInputs={tcoInputs}
         />
       </div>
 

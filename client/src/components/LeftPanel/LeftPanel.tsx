@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type { MapViewMode, OverlayType } from '../../types/map';
 import { glass, colors } from '../../design';
+import type { TcoInputs } from '../../utils/tcoCalculator';
 
 interface Props {
   viewMode: MapViewMode;
@@ -34,6 +35,8 @@ interface Props {
   onMinBedsChange: (beds: number) => void;
   minBaths: number;
   onMinBathsChange: (baths: number) => void;
+  tcoInputs: TcoInputs;
+  onTcoInputsChange: (inputs: TcoInputs) => void;
 }
 
 const MIN_PRICE = 0;
@@ -73,7 +76,7 @@ const OVERLAY_CONFIG: {
     icon: GraduationCap,
     color: colors.emerald,
     bgColor: 'rgba(16,185,129,0.12)',
-    description: 'K-12 quality scores',
+    description: 'School locations',
   },
   {
     key: 'population',
@@ -116,6 +119,8 @@ export function LeftPanel({
   onMinBedsChange,
   minBaths,
   onMinBathsChange,
+  tcoInputs,
+  onTcoInputsChange,
 }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const minPricePct = ((priceRange[0] - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100;
@@ -293,6 +298,61 @@ export function LeftPanel({
                     </span>
                   </button>
                 </div>
+
+                {mapPriceMode === 'netMonthly' && (
+                  <div className="pt-0.5">
+                    <div className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: colors.whiteSubtle, fontFamily: "'Space Grotesk', 'Inter', sans-serif" }}>
+                      Monthly Calc Inputs
+                    </div>
+                    <div className="space-y-2.5 p-2.5 rounded-lg border" style={{ borderColor: colors.border, background: colors.whiteSoft }}>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px]" style={{ color: colors.whiteMuted }}>Interest Rate</span>
+                          <span className="text-[10px] font-semibold tabular-nums" style={{ color: colors.white }}>{tcoInputs.interestRate.toFixed(2)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={2}
+                          max={12}
+                          step={0.125}
+                          value={tcoInputs.interestRate}
+                          onChange={(e) => onTcoInputsChange({ ...tcoInputs, interestRate: Number(e.target.value) })}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px]" style={{ color: colors.whiteMuted }}>Down Payment</span>
+                          <span className="text-[10px] font-semibold tabular-nums" style={{ color: colors.white }}>{Math.round(tcoInputs.downPercent)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={50}
+                          step={1}
+                          value={tcoInputs.downPercent}
+                          onChange={(e) => onTcoInputsChange({ ...tcoInputs, downPercent: Number(e.target.value) })}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px]" style={{ color: colors.whiteMuted }}>Rent Offset</span>
+                          <span className="text-[10px] font-semibold tabular-nums" style={{ color: colors.white }}>{Math.round(tcoInputs.rentPercent)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={tcoInputs.rentPercent}
+                          onChange={(e) => onTcoInputsChange({ ...tcoInputs, rentPercent: Number(e.target.value) })}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="pt-0.5">
                   <div className="flex items-center justify-between mb-2.5">

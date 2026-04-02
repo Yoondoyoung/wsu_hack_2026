@@ -12,7 +12,7 @@ import {
   glass, colors, TAG_STYLES,
 } from '../../design';
 import { PropertyDetail } from './PropertyDetail';
-import { calcTCO, TCO_DEFAULTS } from '../../utils/tcoCalculator';
+import { calcTCO, type TcoInputs } from '../../utils/tcoCalculator';
 
 /* ─── Props ────────────────────────────────────────────────── */
 interface Props {
@@ -21,6 +21,7 @@ interface Props {
   onSelectProperty: (id: string) => void;
   loading: boolean;
   onCardAnchorChange: (pos: { x: number; y: number } | null) => void;
+  tcoInputs: TcoInputs;
 }
 
 /* ─── Badge ────────────────────────────────────────────────── */
@@ -34,9 +35,9 @@ function PropertyBadge({ label, icon: Icon }: { label: string; icon?: React.Elem
 }
 
 /* ─── Compact TCO (inline in accordion card) ──────────────── */
-function CompactTcoSummary({ property }: { property: Property }) {
+function CompactTcoSummary({ property, tcoInputs }: { property: Property; tcoInputs: TcoInputs }) {
   const [open, setOpen] = useState(false);
-  const tco = useMemo(() => calcTCO(property, TCO_DEFAULTS), [property]);
+  const tco = useMemo(() => calcTCO(property, tcoInputs), [property, tcoInputs]);
   const hasRent = (property.rentZestimate ?? 0) > 0;
 
   return (
@@ -85,7 +86,7 @@ function CompactTcoSummary({ property }: { property: Property }) {
               </>
             )}
             <p className="text-[8px] mt-1" style={{ color: colors.whiteSubtle }}>
-              Default: 6.5% rate, 20% down{hasRent ? ', 50% rent offset' : ''}. Open detail for sliders.
+              Inputs: {tcoInputs.interestRate.toFixed(2)}% rate, {Math.round(tcoInputs.downPercent)}% down{hasRent ? `, ${Math.round(tcoInputs.rentPercent)}% rent offset` : ''}.
             </p>
           </div>
         </div>
@@ -107,7 +108,15 @@ function TcoRow({ label, value, bold, green }: { label: string; value: number; b
 }
 
 /* ─── Expanded Detail (inside accordion) ──────────────────── */
-function ExpandedDetail({ property, onOpenDetail }: { property: Property; onOpenDetail: (property: Property) => void }) {
+function ExpandedDetail({
+  property,
+  onOpenDetail,
+  tcoInputs,
+}: {
+  property: Property;
+  onOpenDetail: (property: Property) => void;
+  tcoInputs: TcoInputs;
+}) {
   const [photoIdx, setPhotoIdx] = useState(0);
 
   useEffect(() => { setPhotoIdx(0); }, [property.id]);
@@ -236,7 +245,7 @@ function ExpandedDetail({ property, onOpenDetail }: { property: Property; onOpen
         </div>
 
         {/* Compact TCO summary */}
-        <CompactTcoSummary property={property} />
+        <CompactTcoSummary property={property} tcoInputs={tcoInputs} />
 
         {/* Detail link */}
         {property.detailUrl && (
@@ -262,13 +271,14 @@ function ExpandedDetail({ property, onOpenDetail }: { property: Property; onOpen
 
 /* ─── Compact Card ─────────────────────────────────────────── */
 function CompactCard({
-  property, selected, dimmed, onClick, onOpenDetail,
+  property, selected, dimmed, onClick, onOpenDetail, tcoInputs,
 }: {
   property: Property;
   selected: boolean;
   dimmed: boolean;
   onClick: () => void;
   onOpenDetail: (property: Property) => void;
+  tcoInputs: TcoInputs;
 }) {
   const photo = property.photos?.[0] || property.imageUrl;
 
@@ -307,7 +317,7 @@ function CompactCard({
       {/* Accordion body */}
       <div style={{ display: 'grid', gridTemplateRows: selected ? '1fr' : '0fr', transition: 'grid-template-rows 0.2s ease' }}>
         <div style={{ overflow: 'hidden' }}>
-          {selected && <ExpandedDetail property={property} onOpenDetail={onOpenDetail} />}
+          {selected && <ExpandedDetail property={property} onOpenDetail={onOpenDetail} tcoInputs={tcoInputs} />}
         </div>
       </div>
 
@@ -330,7 +340,7 @@ function scrollChildToVerticalCenter(container: HTMLElement, child: HTMLElement)
 }
 
 /* ─── Main RightPanel ──────────────────────────────────────── */
-export function RightPanel({ properties, selectedId, onSelectProperty, loading, onCardAnchorChange }: Props) {
+export function RightPanel({ properties, selectedId, onSelectProperty, loading, onCardAnchorChange, tcoInputs }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLDivElement>(null);
   const [detailProperty, setDetailProperty] = useState<Property | null>(null);
@@ -430,6 +440,7 @@ export function RightPanel({ properties, selectedId, onSelectProperty, loading, 
                   dimmed={isDimmed}
                   onClick={() => onSelectProperty(p.id)}
                   onOpenDetail={setDetailProperty}
+                  tcoInputs={tcoInputs}
                 />
               </div>
             );

@@ -1,13 +1,19 @@
 import { useRef, useState } from 'react';
-import { X, GripHorizontal, Maximize2, Bed, Bath, Square, ShieldAlert, GraduationCap, DollarSign, TrendingDown, Calendar } from 'lucide-react';
+import {
+  X, GripHorizontal, Maximize2,
+  Bed, Square, ShieldAlert, GraduationCap, DollarSign, TrendingDown, Calendar,
+} from 'lucide-react';
 import type { Property } from '../types/property';
 import { formatPrice, formatSqft } from '../utils/formatters';
 import { calcTCO, TCO_DEFAULTS } from '../utils/tcoCalculator';
 import { colors, glass } from '../design';
 
+/* ─── Layout constants (must match COMPARE_COL_W in App.tsx) ── */
+export const COMPARE_LABEL_W = 130;
+export const COMPARE_COL_W   = 160;
+
 interface Props {
-  propertyA: Property;
-  propertyB: Property;
+  properties: Property[];
   x: number;
   y: number;
   onMove: (x: number, y: number) => void;
@@ -15,67 +21,86 @@ interface Props {
   onSeparate: () => void;
 }
 
-type WinDir = 'a' | 'b' | 'tie';
+/* ─── Helpers ─────────────────────────────────────────────── */
+const WIN_GREEN = '#4ade80';
+const NEUTRAL   = '#e2e2f0';
 
-function winner(a: number, b: number, lowerIsBetter = false): WinDir {
-  if (a === b) return 'tie';
-  return lowerIsBetter ? (a < b ? 'a' : 'b') : (a > b ? 'a' : 'b');
+function bestIndices(values: number[], lowerIsBetter = false): Set<number> {
+  const best = lowerIsBetter ? Math.min(...values) : Math.max(...values);
+  const set = new Set<number>();
+  values.forEach((v, i) => { if (v === best) set.add(i); });
+  return set;
 }
 
-const WIN_COLOR = '#4ade80';
-const LOSE_COLOR = colors.whiteMuted;
-const TIE_COLOR = '#e2e2f0';
-
-function winStyle(dir: WinDir, side: 'a' | 'b'): React.CSSProperties {
-  if (dir === 'tie') return { color: TIE_COLOR, fontWeight: 600 };
-  return dir === side
-    ? { color: WIN_COLOR, fontWeight: 700 }
-    : { color: LOSE_COLOR, fontWeight: 500 };
+function crimeScore(level: 'low' | 'medium' | 'high'): number {
+  return level === 'low' ? 2 : level === 'medium' ? 1 : 0;
 }
 
-function CrimeChip({ level }: { level: 'low' | 'medium' | 'high' }) {
-  const colors_ = { low: '#4ade80', medium: '#fbbf24', high: '#f87171' };
-  const c = colors_[level] ?? '#94a3b8';
-  return <span style={{ color: c, fontWeight: 700, fontSize: 11 }}>{level.toUpperCase()}</span>;
-}
+const CRIME_COLORS: Record<string, string> = { low: '#4ade80', medium: '#fbbf24', high: '#f87171' };
 
-interface RowProps {
+/* ─── Row renderer ────────────────────────────────────────── */
+function Row({
+  label,
+  icon: Icon,
+  values,
+  render,
+  winners,
+  n,
+}: {
   label: string;
   icon: React.ElementType;
-  aNode: React.ReactNode;
-  bNode: React.ReactNode;
-  winDir: WinDir;
-}
-
-function CompareRow({ label, icon: Icon, aNode, bNode, winDir }: RowProps) {
+  values: number[];
+  render: (v: number, p: Property) => React.ReactNode;
+  winners: Set<number>;
+  n: number;
+  props: Property[];
+}) {
   return (
-    <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-      <td style={{ padding: '7px 12px', color: colors.whiteMuted, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', textAlign: 'left', verticalAlign: 'middle' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Icon size={11} style={{ opacity: 0.6 }} />{label}
-        </span>
-      </td>
-      <td style={{ padding: '7px 10px', textAlign: 'center', verticalAlign: 'middle',
-        background: winDir === 'a' ? `${WIN_COLOR}0c` : 'transparent' }}>
-        {aNode}
-      </td>
-      <td style={{ padding: '7px 10px', textAlign: 'center', verticalAlign: 'middle',
-        background: winDir === 'b' ? `${WIN_COLOR}0c` : 'transparent' }}>
-        {bNode}
-      </td>
-    </tr>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `${COMPARE_LABEL_W}px repeat(${n}, ${COMPARE_COL_W}px)`,
+        borderBottom: `1px solid ${colors.border}`,
+      }}
+    >
+      <div style={{ padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 6, color: colors.whiteMuted, fontSize: 10, fontWeight: 600 }}>
+        <Icon size={11} style={{ opacity: 0.6, flexShrink: 0 }} />
+        {label}
+      </div>
+      {values.map((v, i) => (
+        <div
+          key={i}
+          style={{
+            padding: '7px 10px',
+            textAlign: 'center',
+            borderLeft: `1px solid ${colors.border}`,
+            background: winners.has(i) && winners.size < n ? `${WIN_GREEN}0d` : 'transparent',
+            fontSize: 11,
+            fontWeight: winners.has(i) && winners.size < n ? 700 : 500,
+            color: winners.has(i) && winners.size < n ? WIN_GREEN : NEUTRAL,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {render(v, {} as Property)}
+        </div>
+      ))}
+    </div>
   );
 }
 
-export function PropertyCompareView({ propertyA, propertyB, x, y, onMove, onClose, onSeparate }: Props) {
+/* ─── Main component ──────────────────────────────────────── */
+export function PropertyCompareView({ properties, x, y, onMove, onClose, onSeparate }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const dragOffset = useRef({ dx: 0, dy: 0 });
+  const n = properties.length;
+  const totalWidth = COMPARE_LABEL_W + n * COMPARE_COL_W;
 
-  const tcoA = calcTCO(propertyA, TCO_DEFAULTS);
-  const tcoB = calcTCO(propertyB, TCO_DEFAULTS);
-
-  const topSchoolA = propertyA.schools.length > 0 ? Math.max(...propertyA.schools.map((s) => s.rating)) : 0;
-  const topSchoolB = propertyB.schools.length > 0 ? Math.max(...propertyB.schools.map((s) => s.rating)) : 0;
+  const tcos = properties.map((p) => calcTCO(p, TCO_DEFAULTS));
+  const topSchools = properties.map((p) =>
+    p.schools.length > 0 ? Math.max(...p.schools.map((s) => s.rating)) : 0
+  );
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -83,75 +108,32 @@ export function PropertyCompareView({ propertyA, propertyB, x, y, onMove, onClos
     dragOffset.current = { dx: e.clientX - x, dy: e.clientY - y };
     setIsDragging(true);
   }
-
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!isDragging) return;
     onMove(e.clientX - dragOffset.current.dx, e.clientY - dragOffset.current.dy);
   }
-
   function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
     if (!isDragging) return;
     setIsDragging(false);
     onMove(e.clientX - dragOffset.current.dx, e.clientY - dragOffset.current.dy);
   }
 
-  const rows: Omit<RowProps, 'winDir'>[] & { winDir: WinDir }[] = [
-    {
-      label: 'Price',
-      icon: DollarSign,
-      aNode: <span style={winStyle(winner(propertyA.price, propertyB.price, true), 'a')}>{formatPrice(propertyA.price)}</span>,
-      bNode: <span style={winStyle(winner(propertyA.price, propertyB.price, true), 'b')}>{formatPrice(propertyB.price)}</span>,
-      winDir: winner(propertyA.price, propertyB.price, true),
-    },
-    {
-      label: 'Est. Monthly',
-      icon: TrendingDown,
-      aNode: <span style={winStyle(winner(tcoA.netMonthly, tcoB.netMonthly, true), 'a')}>${tcoA.netMonthly.toLocaleString()}/mo</span>,
-      bNode: <span style={winStyle(winner(tcoA.netMonthly, tcoB.netMonthly, true), 'b')}>${tcoB.netMonthly.toLocaleString()}/mo</span>,
-      winDir: winner(tcoA.netMonthly, tcoB.netMonthly, true),
-    },
-    {
-      label: 'Beds / Baths',
-      icon: Bed,
-      aNode: <span style={{ color: '#e2e2f0', fontSize: 11 }}>{propertyA.beds}bd / {propertyA.baths}ba</span>,
-      bNode: <span style={{ color: '#e2e2f0', fontSize: 11 }}>{propertyB.beds}bd / {propertyB.baths}ba</span>,
-      winDir: winner(propertyA.beds + propertyA.baths, propertyB.beds + propertyB.baths),
-    },
-    {
-      label: 'Sqft',
-      icon: Square,
-      aNode: <span style={winStyle(winner(propertyA.sqft, propertyB.sqft), 'a')}>{formatSqft(propertyA.sqft)}</span>,
-      bNode: <span style={winStyle(winner(propertyA.sqft, propertyB.sqft), 'b')}>{formatSqft(propertyB.sqft)}</span>,
-      winDir: winner(propertyA.sqft, propertyB.sqft),
-    },
-    {
-      label: 'Year Built',
-      icon: Calendar,
-      aNode: <span style={winStyle(winner(propertyA.yearBuilt, propertyB.yearBuilt), 'a')}>{propertyA.yearBuilt || '—'}</span>,
-      bNode: <span style={winStyle(winner(propertyA.yearBuilt, propertyB.yearBuilt), 'b')}>{propertyB.yearBuilt || '—'}</span>,
-      winDir: winner(propertyA.yearBuilt, propertyB.yearBuilt),
-    },
-    {
-      label: 'Crime Risk',
-      icon: ShieldAlert,
-      aNode: <CrimeChip level={propertyA.crimeRiskLevel} />,
-      bNode: <CrimeChip level={propertyB.crimeRiskLevel} />,
-      winDir: winner(
-        propertyA.crimeRiskLevel === 'low' ? 2 : propertyA.crimeRiskLevel === 'medium' ? 1 : 0,
-        propertyB.crimeRiskLevel === 'low' ? 2 : propertyB.crimeRiskLevel === 'medium' ? 1 : 0,
-      ),
-    },
-    {
-      label: 'Top School',
-      icon: GraduationCap,
-      aNode: <span style={winStyle(winner(topSchoolA, topSchoolB), 'a')}>{topSchoolA > 0 ? `${topSchoolA}/10` : '—'}</span>,
-      bNode: <span style={winStyle(winner(topSchoolA, topSchoolB), 'b')}>{topSchoolB > 0 ? `${topSchoolB}/10` : '—'}</span>,
-      winDir: winner(topSchoolA, topSchoolB),
-    },
+  /* win tallies */
+  const winCounts = Array(n).fill(0);
+  const metrics: { values: number[]; lowerIsBetter?: boolean }[] = [
+    { values: properties.map((p) => p.price), lowerIsBetter: true },
+    { values: tcos.map((t) => t.netMonthly), lowerIsBetter: true },
+    { values: properties.map((p) => p.beds + p.baths) },
+    { values: properties.map((p) => p.sqft) },
+    { values: properties.map((p) => p.yearBuilt) },
+    { values: properties.map((p) => crimeScore(p.crimeRiskLevel)) },
+    { values: topSchools },
   ];
-
-  const winsA = rows.filter((r) => r.winDir === 'a').length;
-  const winsB = rows.filter((r) => r.winDir === 'b').length;
+  metrics.forEach(({ values, lowerIsBetter }) => {
+    const winners = bestIndices(values, lowerIsBetter);
+    if (winners.size < n) winners.forEach((i) => winCounts[i]++);
+  });
+  const maxWins = Math.max(...winCounts);
 
   return (
     <div
@@ -159,7 +141,7 @@ export function PropertyCompareView({ propertyA, propertyB, x, y, onMove, onClos
         position: 'absolute',
         left: x,
         top: y,
-        width: 480,
+        width: totalWidth,
         zIndex: isDragging ? 40 : 30,
         pointerEvents: 'auto',
         userSelect: 'none',
@@ -170,7 +152,7 @@ export function PropertyCompareView({ propertyA, propertyB, x, y, onMove, onClos
         border: `1.5px solid ${colors.cyan}60`,
       }}
     >
-      {/* Header drag bar */}
+      {/* ── Drag header ── */}
       <div
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -190,13 +172,14 @@ export function PropertyCompareView({ propertyA, propertyB, x, y, onMove, onClos
           <span style={{ color: colors.cyan, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
             SIDE-BY-SIDE COMPARE
           </span>
+          <span style={{ color: colors.whiteMuted, fontSize: 10 }}>({n} properties)</span>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={onSeparate}
             title="Split back to separate cards"
-            style={{ color: colors.whiteMuted, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '2px 6px', borderRadius: 6, transition: 'color 0.15s' }}
+            style={{ color: colors.whiteMuted, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '2px 6px' }}
           >
             <Maximize2 size={11} /> Separate
           </button>
@@ -210,56 +193,158 @@ export function PropertyCompareView({ propertyA, propertyB, x, y, onMove, onClos
         </div>
       </div>
 
-      {/* Property photos + names header */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: `1px solid ${colors.border}` }}>
-        {[propertyA, propertyB].map((p, i) => (
-          <div key={p.id} style={{ position: 'relative', height: 90, borderRight: i === 0 ? `1px solid ${colors.border}` : 'none' }}>
+      {/* ── Photos row — same grid ── */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `${COMPARE_LABEL_W}px repeat(${n}, ${COMPARE_COL_W}px)`,
+          borderBottom: `1px solid ${colors.border}`,
+        }}
+      >
+        {/* Empty label column */}
+        <div style={{ background: 'rgba(0,0,0,0.2)' }} />
+        {properties.map((p, i) => (
+          <div key={p.id} style={{ position: 'relative', height: 88, borderLeft: `1px solid ${colors.border}`, overflow: 'hidden' }}>
             <img
               src={p.photos[0] ?? p.imageUrl}
               alt={p.streetAddress}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/240x90/1a1a2e/6366f1?text=No+Image'; }}
+              onError={(e) => { (e.target as HTMLImageElement).src = `https://placehold.co/${COMPARE_COL_W}x88/1a1a2e/6366f1?text=No+Image`; }}
             />
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, rgba(13,17,23,0.85))' }} />
-            <div style={{ position: 'absolute', bottom: 6, left: 8, right: 8 }}>
-              <p style={{ color: '#e2e2f0', fontSize: 11, fontWeight: 700, margin: 0, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {p.streetAddress}
-              </p>
-            </div>
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, rgba(13,17,23,0.9))' }} />
+            <p style={{ position: 'absolute', bottom: 5, left: 7, right: 7, color: '#e2e2f0', fontSize: 10, fontWeight: 700, margin: 0, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {p.streetAddress}
+            </p>
+            {/* Win badge */}
+            {winCounts[i] === maxWins && maxWins > 0 && (
+              <span style={{ position: 'absolute', top: 5, right: 6, fontSize: 13 }}>🏆</span>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Win tally */}
-      <div style={{ display: 'grid', gridTemplateColumns: `auto 1fr 1fr`, borderBottom: `1px solid ${colors.border}` }}>
-        <div style={{ padding: '5px 12px', color: colors.whiteMuted, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', display: 'flex', alignItems: 'center' }} />
-        {[{ wins: winsA, label: 'A' }, { wins: winsB, label: 'B' }].map(({ wins, label }, i) => (
-          <div key={label} style={{
-            padding: '5px 10px', textAlign: 'center',
-            borderLeft: i === 0 ? `1px solid ${colors.border}` : 'none',
-            borderRight: i === 0 ? `1px solid ${colors.border}` : 'none',
-            background: wins > (i === 0 ? winsB : winsA) ? `${WIN_COLOR}12` : 'transparent',
-          }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: wins > (i === 0 ? winsB : winsA) ? WIN_COLOR : colors.whiteMuted }}>
-              {wins} wins {wins > (i === 0 ? winsB : winsA) ? '🏆' : ''}
+      {/* ── Win tally row — same grid ── */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `${COMPARE_LABEL_W}px repeat(${n}, ${COMPARE_COL_W}px)`,
+          borderBottom: `1px solid ${colors.border}`,
+        }}
+      >
+        <div style={{ padding: '5px 12px', color: colors.whiteMuted, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', display: 'flex', alignItems: 'center' }}>
+          WINS
+        </div>
+        {winCounts.map((w, i) => (
+          <div
+            key={i}
+            style={{
+              padding: '5px 0',
+              textAlign: 'center',
+              borderLeft: `1px solid ${colors.border}`,
+              background: w === maxWins && maxWins > 0 ? `${WIN_GREEN}12` : 'transparent',
+            }}
+          >
+            <span style={{ fontSize: 10, fontWeight: 700, color: w === maxWins && maxWins > 0 ? WIN_GREEN : colors.whiteMuted }}>
+              {w} wins
             </span>
           </div>
         ))}
       </div>
 
-      {/* Comparison table */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-        <colgroup>
-          <col style={{ width: '30%' }} />
-          <col style={{ width: '35%' }} />
-          <col style={{ width: '35%' }} />
-        </colgroup>
-        <tbody>
-          {rows.map((row) => (
-            <CompareRow key={row.label} {...row} />
-          ))}
-        </tbody>
-      </table>
+      {/* ── Data rows ── */}
+      {/* Price */}
+      {renderRow(n, 'Price', DollarSign, properties.map((p) => p.price), true, (v) =>
+        <span style={{ fontSize: 11 }}>{formatPrice(v)}</span>
+      )}
+      {/* Est. Monthly */}
+      {renderRow(n, 'Est. Monthly', TrendingDown, tcos.map((t) => t.netMonthly), true, (v) =>
+        <span style={{ fontSize: 11 }}>${v.toLocaleString()}/mo</span>
+      )}
+      {/* Beds / Baths — render with index */}
+      <div style={{ display: 'grid', gridTemplateColumns: `${COMPARE_LABEL_W}px repeat(${n}, ${COMPARE_COL_W}px)`, borderBottom: `1px solid ${colors.border}` }}>
+        <div style={labelStyle}><Bed size={11} style={{ opacity: 0.6, flexShrink: 0 }} />Beds / Baths</div>
+        {properties.map((p, i) => {
+          const vals = properties.map((pp) => pp.beds + pp.baths);
+          const winners = bestIndices(vals);
+          const isWin = winners.has(i) && winners.size < n;
+          return <div key={p.id} style={cellStyle(isWin)}><span style={{ fontSize: 11, color: isWin ? WIN_GREEN : NEUTRAL, fontWeight: isWin ? 700 : 500 }}>{p.beds}bd / {p.baths}ba</span></div>;
+        })}
+      </div>
+      {/* Sqft */}
+      {renderRow(n, 'Sqft', Square, properties.map((p) => p.sqft), false, (v) =>
+        <span style={{ fontSize: 11 }}>{v > 0 ? formatSqft(v) : '—'}</span>
+      )}
+      {/* Year Built */}
+      {renderRow(n, 'Year Built', Calendar, properties.map((p) => p.yearBuilt), false, (v) =>
+        <span style={{ fontSize: 11 }}>{v > 0 ? v : '—'}</span>
+      )}
+      {/* Crime Risk */}
+      <div style={{ display: 'grid', gridTemplateColumns: `${COMPARE_LABEL_W}px repeat(${n}, ${COMPARE_COL_W}px)`, borderBottom: `1px solid ${colors.border}` }}>
+        <div style={labelStyle}><ShieldAlert size={11} style={{ opacity: 0.6, flexShrink: 0 }} />Crime Risk</div>
+        {properties.map((p, i) => {
+          const vals = properties.map((pp) => crimeScore(pp.crimeRiskLevel));
+          const winners = bestIndices(vals);
+          const isWin = winners.has(i) && winners.size < n;
+          return (
+            <div key={p.id} style={cellStyle(isWin)}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: CRIME_COLORS[p.crimeRiskLevel] }}>
+                {p.crimeRiskLevel.toUpperCase()}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {/* Top School */}
+      {renderRow(n, 'Top School', GraduationCap, topSchools, false, (v) =>
+        <span style={{ fontSize: 11 }}>{v > 0 ? `${v}/10` : '—'}</span>
+      )}
+    </div>
+  );
+}
+
+/* ─── Shared cell helpers ─────────────────────────────────── */
+const labelStyle: React.CSSProperties = {
+  padding: '7px 12px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  color: colors.whiteMuted,
+  fontSize: 10,
+  fontWeight: 600,
+};
+
+function cellStyle(isWin: boolean): React.CSSProperties {
+  return {
+    padding: '7px 10px',
+    textAlign: 'center',
+    borderLeft: `1px solid ${colors.border}`,
+    background: isWin ? `${WIN_GREEN}0d` : 'transparent',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+}
+
+function renderRow(
+  n: number,
+  label: string,
+  Icon: React.ElementType,
+  values: number[],
+  lowerIsBetter: boolean,
+  render: (v: number) => React.ReactNode,
+) {
+  const winners = bestIndices(values, lowerIsBetter);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `${COMPARE_LABEL_W}px repeat(${n}, ${COMPARE_COL_W}px)`, borderBottom: `1px solid ${colors.border}` }}>
+      <div style={labelStyle}><Icon size={11} style={{ opacity: 0.6, flexShrink: 0 }} />{label}</div>
+      {values.map((v, i) => {
+        const isWin = winners.has(i) && winners.size < n;
+        return (
+          <div key={i} style={{ ...cellStyle(isWin), color: isWin ? WIN_GREEN : NEUTRAL, fontWeight: isWin ? 700 : 500, fontSize: 11 }}>
+            {render(v)}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -5,13 +5,15 @@ import { CenterPanel } from './components/CenterPanel/CenterPanel';
 import { RightPanel } from './components/RightPanel/RightPanel';
 import { ConnectionLine } from './components/ConnectionLine';
 import { FloatingPropertyCard } from './components/FloatingPropertyCard';
-import { PropertyCompareView } from './components/PropertyCompareView';
+import { PropertyCompareView, COMPARE_LABEL_W, COMPARE_COL_W } from './components/PropertyCompareView';
 import { useMapState } from './hooks/useMapState';
 import { useProperties } from './hooks/useProperties';
 import { glass, colors } from './design';
 import { calcTCO, TCO_DEFAULTS, type TcoInputs } from './utils/tcoCalculator';
 
-const SNAP_THRESHOLD = 120; // px
+const SNAP_THRESHOLD = 120;        // px — float-card to float-card
+const COMPARE_H_APPROX = 460;      // px — estimated compare view height for proximity detection
+const MAX_COMPARE = 4;
 
 export type MapPriceMode = 'listing' | 'netMonthly';
 
@@ -131,7 +133,15 @@ export default function App() {
   /* ─── Floating Cards ─────────────────────────────────── */
   const [floatingCards, setFloatingCards] = useState<{ id: string; x: number; y: number }[]>([]);
   const [comparePos, setComparePos] = useState<{ x: number; y: number } | null>(null);
-  const [compareIds, setCompareIds] = useState<[string, string] | null>(null);
+  const [compareIds, setCompareIds] = useState<string[] | null>(null);
+
+  // Refs so event handlers always see latest values without re-binding
+  const floatingCardsRef = useRef(floatingCards);
+  const compareIdsRef    = useRef(compareIds);
+  const comparePosRef    = useRef(comparePos);
+  floatingCardsRef.current = floatingCards;
+  compareIdsRef.current    = compareIds;
+  comparePosRef.current    = comparePos;
 
   const floatingCardIds = useMemo(() => new Set(floatingCards.map((c) => c.id)), [floatingCards]);
 
@@ -139,7 +149,6 @@ export default function App() {
     e.preventDefault();
     const id = e.dataTransfer.getData('propertyId');
     if (!id) return;
-    // Avoid duplicates (card already floating)
     setFloatingCards((prev) => {
       if (prev.some((c) => c.id === id)) return prev;
       return [...prev, { id, x: e.clientX - 120, y: e.clientY - 60 }];
@@ -151,20 +160,49 @@ export default function App() {
   }, []);
 
   const handleSnapCheck = useCallback((draggedId: string, x: number, y: number) => {
-    setFloatingCards((prev) => {
-      const updated = prev.map((c) => c.id === draggedId ? { ...c, x, y } : c);
-      const dragged = updated.find((c) => c.id === draggedId);
-      if (!dragged) return updated;
-      const target = updated.find((c) => c.id !== draggedId && Math.hypot(c.x - dragged.x, c.y - dragged.y) < SNAP_THRESHOLD);
-      if (target) {
-        const midX = (dragged.x + target.x) / 2 - 240;
-        const midY = (dragged.y + target.y) / 2;
-        setCompareIds([target.id, draggedId]);
-        setComparePos({ x: midX, y: midY });
-        return updated.filter((c) => c.id !== draggedId && c.id !== target.id);
+    const currentCompareIds  = compareIdsRef.current;
+    const currentComparePos  = comparePosRef.current;
+    const currentFloating    = floatingCardsRef.current;
+
+    // 1. Try snapping dragged card INTO an existing compare view
+    if (
+      currentCompareIds &&
+      currentComparePos &&
+      currentCompareIds.length < MAX_COMPARE &&
+      !currentCompareIds.includes(draggedId)
+    ) {
+      const compareW = COMPARE_LABEL_W + currentCompareIds.length * COMPARE_COL_W;
+      const inBounds =
+        x >= currentComparePos.x - SNAP_THRESHOLD &&
+        x <= currentComparePos.x + compareW + SNAP_THRESHOLD &&
+        y >= currentComparePos.y - SNAP_THRESHOLD &&
+        y <= currentComparePos.y + COMPARE_H_APPROX + SNAP_THRESHOLD;
+      if (inBounds) {
+        setCompareIds((ids) => (ids ? [...ids, draggedId] : [draggedId]));
+        setFloatingCards((fc) => fc.filter((c) => c.id !== draggedId));
+        return;
       }
-      return updated;
-    });
+    }
+
+    // 2. Try snapping two floating cards together to start a compare view
+    const dragged = currentFloating.find((c) => c.id === draggedId);
+    if (!dragged) {
+      setFloatingCards((fc) => fc.map((c) => c.id === draggedId ? { ...c, x, y } : c));
+      return;
+    }
+    const updatedDragged = { ...dragged, x, y };
+    const target = currentFloating.find(
+      (c) => c.id !== draggedId && Math.hypot(c.x - updatedDragged.x, c.y - updatedDragged.y) < SNAP_THRESHOLD
+    );
+    if (target) {
+      const midX = (updatedDragged.x + target.x) / 2 - (COMPARE_LABEL_W + COMPARE_COL_W);
+      const midY = Math.min(updatedDragged.y, target.y);
+      setCompareIds([target.id, draggedId]);
+      setComparePos({ x: midX, y: midY });
+      setFloatingCards((fc) => fc.filter((c) => c.id !== draggedId && c.id !== target.id));
+    } else {
+      setFloatingCards((fc) => fc.map((c) => c.id === draggedId ? { ...c, x, y } : c));
+    }
   }, []);
 
   const handleFloatClose = useCallback((id: string) => {
@@ -181,15 +219,34 @@ export default function App() {
   }, []);
 
   const handleCompareSeparate = useCallback(() => {
-    if (!compareIds || !comparePos) return;
+    const ids = compareIdsRef.current;
+    const pos  = comparePosRef.current;
+    if (!ids || !pos) return;
     setFloatingCards((prev) => [
       ...prev,
-      { id: compareIds[0], x: comparePos.x, y: comparePos.y },
-      { id: compareIds[1], x: comparePos.x + 260, y: comparePos.y },
+      ...ids.map((id, i) => ({ id, x: pos.x + i * (COMPARE_COL_W + 8), y: pos.y })),
     ]);
     setCompareIds(null);
     setComparePos(null);
-  }, [compareIds, comparePos]);
+  }, []);
+
+  // Which floating card (if any) is hovering over the compare view → show "ADD TO COMPARE" hint
+  const snapToCompareId = useMemo(() => {
+    if (!compareIds || !comparePos || compareIds.length >= MAX_COMPARE) return null;
+    const compareW = COMPARE_LABEL_W + compareIds.length * COMPARE_COL_W;
+    for (const card of floatingCards) {
+      if (compareIds.includes(card.id)) continue;
+      if (
+        card.x >= comparePos.x - SNAP_THRESHOLD &&
+        card.x <= comparePos.x + compareW + SNAP_THRESHOLD &&
+        card.y >= comparePos.y - SNAP_THRESHOLD &&
+        card.y <= comparePos.y + COMPARE_H_APPROX + SNAP_THRESHOLD
+      ) {
+        return card.id;
+      }
+    }
+    return null;
+  }, [floatingCards, compareIds, comparePos]);
 
   const netMonthlyMap = useMemo(() => {
     if (mapPriceMode !== 'netMonthly') return null;
@@ -301,7 +358,6 @@ export default function App() {
         {floatingCards.map((card) => {
           const prop = properties.find((p) => p.id === card.id);
           if (!prop) return null;
-          // Compute snap target: is this card close enough to another floating card?
           const isSnapTarget = floatingCards.some(
             (other) => other.id !== card.id && Math.hypot(other.x - card.x, other.y - card.y) < SNAP_THRESHOLD
           );
@@ -312,6 +368,7 @@ export default function App() {
               x={card.x}
               y={card.y}
               snapTarget={isSnapTarget}
+              snapToCompare={snapToCompareId === card.id}
               onMove={handleFloatMove}
               onSnapRelease={handleSnapCheck}
               onClose={handleFloatClose}
@@ -320,13 +377,11 @@ export default function App() {
         })}
 
         {compareIds && comparePos && (() => {
-          const pA = properties.find((p) => p.id === compareIds[0]);
-          const pB = properties.find((p) => p.id === compareIds[1]);
-          if (!pA || !pB) return null;
+          const compareProps = compareIds.map((id) => properties.find((p) => p.id === id)).filter(Boolean) as typeof properties;
+          if (compareProps.length < 2) return null;
           return (
             <PropertyCompareView
-              propertyA={pA}
-              propertyB={pB}
+              properties={compareProps}
               x={comparePos.x}
               y={comparePos.y}
               onMove={handleCompareMove}

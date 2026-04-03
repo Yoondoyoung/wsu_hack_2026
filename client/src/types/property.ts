@@ -44,6 +44,14 @@ export interface Property {
   crimeRiskRadiusMiles: number;
   /** low / medium / high by tertiles within the current listing batch (not absolute crime rate). */
   crimeRiskLevel: 'low' | 'medium' | 'high';
+  /** Distance-weighted estimate from nearby road noise segments (dB). Set by `seed:supabase`. */
+  noiseExposureDbAvg?: number;
+  /** Search radius (miles) used for road noise sampling. */
+  noiseExposureRadiusMiles?: number;
+  /** Exponential decay distance (miles) for weighting segments. */
+  noiseExposureDecayMiles?: number;
+  /** low = quietest third of listings by noiseExposureDbAvg; high = loudest third (batch-relative). */
+  noiseExposureLevel?: 'low' | 'medium' | 'high';
 }
 
 export interface SchoolInfo {

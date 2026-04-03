@@ -14,6 +14,7 @@ export const colors = {
   cyanLight: "#8beeff",
   emerald: "#10b981",
   blue: "#3b82f6",
+  indigo: "#6366f1",
   yellow: "#f59e0b",
   red: "#ef4444",
   redSoft: "#f87171",

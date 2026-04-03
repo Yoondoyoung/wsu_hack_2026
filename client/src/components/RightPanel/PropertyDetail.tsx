@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback, type ElementType, type ReactNode } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Bed, Bath, Square, Flame, Snowflake, Car, Wrench, Building,
-  GraduationCap, User, Phone, Clock, Eye, Heart, TrendingUp, ExternalLink, ShieldAlert,
+  GraduationCap, User, Phone, Clock, Eye, Heart, TrendingUp, ExternalLink, ShieldAlert, Volume2,
   AlertCircle, DollarSign, TrendingDown, Lightbulb, ArrowUp, ShoppingCart, Navigation,
 } from 'lucide-react';
 import { useNearbyGrocery } from '../../hooks/useNearbyGrocery';
@@ -10,6 +10,7 @@ import type { MortgageRequestPayload } from '../../types/mortgage';
 import type { Property } from '../../types/property';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
+import { noiseExposureLabel } from '../../utils/noiseExposure';
 import { colors, ctaButtonStyle, getGaugeColor, getGaugeLabel } from '../../design';
 import { calcTCO, homeAgeYears, type TcoInputs } from '../../utils/tcoCalculator';
 
@@ -618,6 +619,13 @@ export function PropertyDetail({ property, onClose, tcoInputs, onTcoInputsChange
                   <span className="flex items-center gap-1" title="Reported incidents within 2 miles">
                     <ShieldAlert size={14} className="text-[#f87171]" />
                     {crimeRiskLabel(property.crimeRiskLevel)} ({property.crimeIncidentCount ?? 0} within {property.crimeRiskRadiusMiles ?? 0.5} mi)
+                  </span>
+                  <span
+                    className="flex items-center gap-1"
+                    title="Estimated from nearby road noise segments (distance-weighted; batch-relative tier)"
+                  >
+                    <Volume2 size={14} className="text-[#fbbf24]" />
+                    {noiseExposureLabel(property.noiseExposureLevel)} (~{property.noiseExposureDbAvg?.toFixed(1) ?? '—'} dB est.)
                   </span>
                 </div>
                 {property.detailUrl && (

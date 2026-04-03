@@ -3,6 +3,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import proj4 from 'proj4';
 import { supabase } from '../lib/supabase.js';
+import { noiseGeojsonWithIntensity } from '../lib/noiseGeojson.js';
+import { buildNoiseEdgeGrid, edgesFromNoiseGeojson, noiseExposureDbAvgAt } from '../lib/noiseExposure.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -10,6 +12,9 @@ const UTAH_CENTRAL =
   '+proj=lcc +lat_0=38.3333333333333 +lon_0=-111.5 +lat_1=40.65 +lat_2=39.0166666666667 +x_0=500000.00001016 +y_0=2000000.00001016 +datum=NAD83 +units=us-ft +no_defs';
 
 const CRIME_RISK_RADIUS_MILES = 0.5;
+
+const NOISE_EXPOSURE_RADIUS_MILES = 0.25;
+const NOISE_DECAY_MILES = 0.125;
 
 function normalizeArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -174,7 +179,11 @@ function loadCrimeRows() {
   });
 }
 
-function mapProperties(listings: any[], crimePoints: [number, number][]) {
+function mapProperties(
+  listings: any[],
+  crimePoints: [number, number][],
+  noiseIndex: { edges: ReturnType<typeof edgesFromNoiseGeojson>; grid: ReturnType<typeof buildNoiseEdgeGrid> }
+) {
   const mapped = listings.map((l: any) => {
     const det = l.detail || {};
     const info = l.raw?.hdpData?.homeInfo || {};
@@ -252,13 +261,27 @@ function mapProperties(listings: any[], crimePoints: [number, number][]) {
   });
   const { lowMax, medMax } = tertileThresholds(counts);
 
+  const noiseDbAvgs = mapped.map((p) => {
+    const [lng, lat] = p.coordinates;
+    return noiseExposureDbAvgAt(lng, lat, noiseIndex.edges, noiseIndex.grid, {
+      searchRadiusMiles: NOISE_EXPOSURE_RADIUS_MILES,
+      decayMiles: NOISE_DECAY_MILES,
+    });
+  });
+  const { lowMax: noiseLowMax, medMax: noiseMedMax } = tertileThresholds(noiseDbAvgs);
+
   return mapped.map((p, i) => {
     const crimeIncidentCount = counts[i]!;
+    const noiseExposureDbAvg = noiseDbAvgs[i]!;
     return {
       ...p,
       crimeIncidentCount,
       crimeRiskRadiusMiles: CRIME_RISK_RADIUS_MILES,
       crimeRiskLevel: crimeRiskLevelFromTertiles(crimeIncidentCount, lowMax, medMax),
+      noiseExposureDbAvg,
+      noiseExposureRadiusMiles: NOISE_EXPOSURE_RADIUS_MILES,
+      noiseExposureDecayMiles: NOISE_DECAY_MILES,
+      noiseExposureLevel: crimeRiskLevelFromTertiles(noiseExposureDbAvg, noiseLowMax, noiseMedMax),
     };
   });
 }
@@ -308,7 +331,15 @@ async function main() {
 
   const crimeRows = loadCrimeRows();
   const crimePoints: [number, number][] = crimeRows.map((r) => [r.lng as number, r.lat as number]);
-  const properties = mapProperties(houseRaw.listings, crimePoints);
+
+  const noiseRawPath = join(__dirname, '..', 'data', 'noise', 'slc_road_noise_lines.geojson');
+  const noiseRaw = JSON.parse(readFileSync(noiseRawPath, 'utf-8')) as { type?: string; features?: unknown[] };
+  const noiseForEdges = noiseGeojsonWithIntensity(noiseRaw);
+  const noiseEdges = edgesFromNoiseGeojson(noiseForEdges);
+  const noiseGrid = buildNoiseEdgeGrid(noiseEdges);
+  console.log(`[seed] noise edges: ${noiseEdges.length}`);
+
+  const properties = mapProperties(houseRaw.listings, crimePoints, { edges: noiseEdges, grid: noiseGrid });
 
   const schoolFile = join(
     __dirname,
@@ -357,8 +388,14 @@ async function main() {
 
   const overlayTypes = ['population', 'noise', 'structures'] as const;
   const overlayRows = overlayTypes.map((type) => {
-    const filePath = join(__dirname, '..', 'data', 'overlays', `${type}.geojson`);
-    const geojson = JSON.parse(readFileSync(filePath, 'utf-8'));
+    const filePath =
+      type === 'noise'
+        ? join(__dirname, '..', 'data', 'noise', 'slc_road_noise_lines.geojson')
+        : join(__dirname, '..', 'data', 'overlays', `${type}.geojson`);
+    let geojson = JSON.parse(readFileSync(filePath, 'utf-8')) as { type?: string; features?: unknown[] };
+    if (type === 'noise') {
+      geojson = noiseGeojsonWithIntensity(geojson);
+    }
     return { type, geojson };
   });
 

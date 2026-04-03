@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   X, GripHorizontal, Maximize2,
-  Bed, Square, ShieldAlert, GraduationCap, DollarSign, TrendingDown, Calendar,
+  Bed, Square, ShieldAlert, GraduationCap, DollarSign, TrendingDown, Calendar, Volume2,
 } from 'lucide-react';
 import type { Property } from '../types/property';
 import { formatPrice, formatSqft } from '../utils/formatters';
@@ -36,7 +36,12 @@ function crimeScore(level: 'low' | 'medium' | 'high'): number {
   return level === 'low' ? 2 : level === 'medium' ? 1 : 0;
 }
 
+function noiseScore(level: 'low' | 'medium' | 'high'): number {
+  return level === 'low' ? 2 : level === 'medium' ? 1 : 0;
+}
+
 const CRIME_COLORS: Record<string, string> = { low: '#4ade80', medium: '#fbbf24', high: '#f87171' };
+const NOISE_COLORS: Record<string, string> = { low: '#4ade80', medium: '#fbbf24', high: '#f87171' };
 
 /* ─── Row renderer ────────────────────────────────────────── */
 function Row({
@@ -127,6 +132,7 @@ export function PropertyCompareView({ properties, x, y, onMove, onClose, onSepar
     { values: properties.map((p) => p.sqft) },
     { values: properties.map((p) => p.yearBuilt) },
     { values: properties.map((p) => crimeScore(p.crimeRiskLevel)) },
+    { values: properties.map((p) => noiseScore(p.noiseExposureLevel ?? 'medium')) },
     { values: topSchools },
   ];
   metrics.forEach(({ values, lowerIsBetter }) => {
@@ -289,6 +295,22 @@ export function PropertyCompareView({ properties, x, y, onMove, onClose, onSepar
             <div key={p.id} style={cellStyle(isWin)}>
               <span style={{ fontSize: 11, fontWeight: 700, color: CRIME_COLORS[p.crimeRiskLevel] }}>
                 {p.crimeRiskLevel.toUpperCase()}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {/* Road noise (batch-relative tier) */}
+      <div style={{ display: 'grid', gridTemplateColumns: `${COMPARE_LABEL_W}px repeat(${n}, ${COMPARE_COL_W}px)`, borderBottom: `1px solid ${colors.border}` }}>
+        <div style={labelStyle}><Volume2 size={11} style={{ opacity: 0.6, flexShrink: 0 }} />Road noise</div>
+        {properties.map((p, i) => {
+          const vals = properties.map((pp) => noiseScore(pp.noiseExposureLevel ?? 'medium'));
+          const winners = bestIndices(vals);
+          const isWin = winners.has(i) && winners.size < n;
+          return (
+            <div key={p.id} style={cellStyle(isWin)}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: NOISE_COLORS[p.noiseExposureLevel ?? 'medium'] }}>
+                {(p.noiseExposureLevel ?? 'N/A').toUpperCase()}
               </span>
             </div>
           );

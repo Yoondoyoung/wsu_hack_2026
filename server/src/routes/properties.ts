@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import geojsonvt from 'geojson-vt';
 import vtpbf from 'vt-pbf';
 import { supabase } from '../lib/supabase.js';
+import { noiseGeojsonWithIntensity } from '../lib/noiseGeojson.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -72,6 +73,32 @@ let schoolsGeoJSON: object | null = null;
 let groceryGeoJSON: object | null = null;
 const geojsonByType = new Map<string, object>();
 let structuresTileIndex: any | null = null;
+let noiseOverlayGeoJSON: object | null = null;
+
+async function loadNoiseOverlayGeoJSON(): Promise<object> {
+  if (noiseOverlayGeoJSON) return noiseOverlayGeoJSON;
+  try {
+    const { data, error } = await supabase
+      .from('overlay_geojson')
+      .select('geojson')
+      .eq('type', 'noise')
+      .maybeSingle();
+    if (!error && data?.geojson) {
+      // Always normalize on read (Supabase data might not include computed fields).
+      noiseOverlayGeoJSON = noiseGeojsonWithIntensity(data.geojson as any);
+      return noiseOverlayGeoJSON;
+    }
+  } catch {
+    // fall through to file
+  }
+  const noisePath = join(__dirname, '..', 'data', 'noise', 'slc_road_noise_lines.geojson');
+  if (!existsSync(noisePath)) {
+    throw new Error('noise overlay not in Supabase and slc_road_noise_lines.geojson missing');
+  }
+  const raw = JSON.parse(readFileSync(noisePath, 'utf-8')) as { type?: string; features?: unknown[] };
+  noiseOverlayGeoJSON = noiseGeojsonWithIntensity(raw);
+  return noiseOverlayGeoJSON;
+}
 
 async function loadCrimeGeoJSON() {
   if (crimeGeoJSON) return crimeGeoJSON;
@@ -272,6 +299,18 @@ propertiesRouter.get('/overlays/:type', async (req, res) => {
     } catch (e) {
       console.error('Failed to load grocery overlay from Supabase:', e);
       res.status(404).json({ error: 'Grocery overlay data not found' });
+      return;
+    }
+  }
+
+  if (type === 'noise') {
+    try {
+      const data = await loadNoiseOverlayGeoJSON();
+      res.json(data);
+      return;
+    } catch (error) {
+      console.error(`Failed to load '${type}' overlay:`, error);
+      res.status(404).json({ error: `Overlay data for '${type}' not found` });
       return;
     }
   }

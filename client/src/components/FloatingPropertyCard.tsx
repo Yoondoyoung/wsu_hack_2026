@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, GripHorizontal, Bed, Bath, Square, ShieldAlert } from 'lucide-react';
+import { X, GripHorizontal, Bed, Bath, Square, ShieldAlert, Volume2 } from 'lucide-react';
 import type { Property } from '../types/property';
 import { formatPrice, formatSqft } from '../utils/formatters';
 import { crimeRiskLabel } from '../utils/crimeRisk';
+import { noiseExposureLabel } from '../utils/noiseExposure';
 import { calcTCO, TCO_DEFAULTS } from '../utils/tcoCalculator';
 import { colors, glass } from '../design';
 
@@ -134,7 +135,7 @@ export function FloatingPropertyCard({ property, x, y, snapTarget, snapToCompare
           <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Square size={10} />{formatSqft(property.sqft)}</span>
         </div>
 
-        {/* Crime + TCO */}
+        {/* Crime + noise + TCO */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: crimeColor }}>
             <ShieldAlert size={10} />
@@ -143,6 +144,10 @@ export function FloatingPropertyCard({ property, x, y, snapTarget, snapToCompare
           <span style={{ fontSize: 10, color: colors.cyan, fontWeight: 700 }}>
             ${tco.netMonthly.toLocaleString()}/mo
           </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, fontWeight: 600, color: colors.whiteMuted }}>
+          <Volume2 size={10} />
+          {noiseExposureLabel(property.noiseExposureLevel)}
         </div>
 
         {(snapTarget || snapToCompare) && (

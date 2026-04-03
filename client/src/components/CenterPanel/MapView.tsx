@@ -8,6 +8,7 @@ import type { MapPriceMode } from '../../App';
 import { fetchOverlay } from '../../services/api';
 import { formatPrice, formatPriceCompact, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
+import { noiseExposureLabel } from '../../utils/noiseExposure';
 import { colors, glass } from '../../design';
 
 /** Matches `structures-fill` OCC_CLS → fill-color in this file */
@@ -206,6 +207,9 @@ function GlowMarker({
           </p>
           <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>
             {crimeRiskLabel(property.crimeRiskLevel)} · {property.crimeIncidentCount ?? 0} within {property.crimeRiskRadiusMiles ?? 0.5} mi
+          </p>
+          <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>
+            {noiseExposureLabel(property.noiseExposureLevel)} · ~{property.noiseExposureDbAvg?.toFixed(1) ?? '—'} dB (road noise est.)
           </p>
           <p className="text-[10px] mt-0.5 truncate" style={{ color: colors.whiteSubtle }}>
             {property.streetAddress}
@@ -535,9 +539,42 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
           </Source>
         )}
 
-        {/* Other heatmap overlays */}
+        {/* Road noise: LineString segments (dB → stepped bin palette), not heatmap */}
+        {activeOverlays.has('noise') && overlayData.noise && (
+          <Source id="source-noise" type="geojson" data={overlayData.noise}>
+            <Layer
+              id="noise-road-lines"
+              type="line"
+              layout={{
+                'line-cap': 'round',
+                'line-join': 'round',
+              }}
+              paint={{
+                'line-color': [
+                  'match',
+                  ['get', 'noise_db_bin'],
+                  0,
+                  '#1e3a8a', // <60
+                  1,
+                  '#2563eb', // 60-64.999
+                  2,
+                  '#f59e0b', // 65-69.999
+                  3,
+                  '#f97316', // 70-74.999
+                  4,
+                  '#ef4444', // >=75
+                  '#6d28d9', // fallback
+                ],
+                'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.2, 13, 2, 16, 3.2, 18, 4.5],
+                'line-opacity': ['interpolate', ['linear'], ['zoom'], 10, 0.65, 14, 0.82, 18, 0.92],
+              }}
+            />
+          </Source>
+        )}
+
+        {/* Other heatmap overlays (population, schools — not noise) */}
         {Array.from(activeOverlays).map((overlay) =>
-          overlay !== 'structures' && overlay !== 'crime' && overlay !== 'grocery' && overlayData[overlay] ? (
+          overlay !== 'structures' && overlay !== 'crime' && overlay !== 'grocery' && overlay !== 'noise' && overlayData[overlay] ? (
             <Source key={overlay} id={`source-${overlay}`} type="geojson" data={overlayData[overlay]}>
               <Layer {...heatmapLayer(overlay)} />
               {overlay === 'schools' && (

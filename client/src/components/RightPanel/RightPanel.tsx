@@ -8,6 +8,7 @@ import {
 import type { Property } from '../../types/property';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
+import { noiseExposureLabel } from '../../utils/noiseExposure';
 import {
   glass, colors, TAG_STYLES,
 } from '../../design';
@@ -343,6 +344,7 @@ function ExpandedDetail({
             label={crimeRiskLabel(property.crimeRiskLevel)}
             icon={ShieldAlert}
           />
+          <PropertyBadge label={noiseExposureLabel(property.noiseExposureLevel)} icon={Volume2} />
           <span className="text-[9px] leading-tight" style={{ color: colors.whiteSubtle }}>
             {property.crimeIncidentCount ?? 0} incidents within {property.crimeRiskRadiusMiles ?? 0.5} mi
           </span>

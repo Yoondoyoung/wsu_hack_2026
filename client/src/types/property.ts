@@ -44,6 +44,8 @@ export interface Property {
   crimeRiskRadiusMiles: number;
   /** low / medium / high by tertiles within the current listing batch (not absolute crime rate). */
   crimeRiskLevel: 'low' | 'medium' | 'high';
+  /** Nearest grocery distance in miles (server-computed). */
+  nearestGroceryDistanceMiles?: number | null;
 }
 
 export interface SchoolInfo {
@@ -53,6 +55,7 @@ export interface SchoolInfo {
   level: string;
   type: string;
   link: string;
+  grades?: string | null;
 }
 
 export interface PriceHistoryItem {

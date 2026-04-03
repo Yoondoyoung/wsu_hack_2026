@@ -14,6 +14,7 @@ import {
   BedDouble,
   Bath,
   ShoppingCart,
+  RotateCcw,
 } from 'lucide-react';
 import type { MapViewMode, OverlayType } from '../../types/map';
 import { glass, colors } from '../../design';
@@ -28,14 +29,21 @@ interface Props {
   onToggleCollapse: () => void;
   priceRange: [number, number];
   onPriceRangeChange: (range: [number, number]) => void;
-  minSchoolRating: number;
-  onMinSchoolRatingChange: (rating: number) => void;
   mapPriceMode: 'listing' | 'netMonthly';
   onMapPriceModeChange: (mode: 'listing' | 'netMonthly') => void;
   minBeds: number;
   onMinBedsChange: (beds: number) => void;
   minBaths: number;
   onMinBathsChange: (baths: number) => void;
+  crimeRisk: 'any' | 'low' | 'medium' | 'high';
+  onCrimeRiskChange: (risk: 'any' | 'low' | 'medium' | 'high') => void;
+  schoolAgeGroups: Array<'elementary' | 'middle' | 'high'>;
+  onSchoolAgeGroupsChange: (groups: Array<'elementary' | 'middle' | 'high'>) => void;
+  schoolRadiusMiles: number;
+  onSchoolRadiusMilesChange: (miles: number) => void;
+  groceryRadiusMiles: number;
+  onGroceryRadiusMilesChange: (miles: number) => void;
+  onResetFilters: () => void;
   tcoInputs: TcoInputs;
   onTcoInputsChange: (inputs: TcoInputs) => void;
 }
@@ -128,12 +136,30 @@ export function LeftPanel({
   onMinBedsChange,
   minBaths,
   onMinBathsChange,
+  crimeRisk,
+  onCrimeRiskChange,
+  schoolAgeGroups,
+  onSchoolAgeGroupsChange,
+  schoolRadiusMiles,
+  onSchoolRadiusMilesChange,
+  groceryRadiusMiles,
+  onGroceryRadiusMilesChange,
+  onResetFilters,
   tcoInputs,
   onTcoInputsChange,
 }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const minPricePct = ((priceRange[0] - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100;
   const maxPricePct = ((priceRange[1] - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100;
+  const schoolRadiusEnabled = schoolAgeGroups.length > 0;
+
+  const toggleSchoolGroup = (group: 'elementary' | 'middle' | 'high') => {
+    if (schoolAgeGroups.includes(group)) {
+      onSchoolAgeGroupsChange(schoolAgeGroups.filter((g) => g !== group));
+      return;
+    }
+    onSchoolAgeGroupsChange([...schoolAgeGroups, group]);
+  };
 
   return (
     <div
@@ -289,6 +315,22 @@ export function LeftPanel({
 
             {filtersOpen && (
               <div className="space-y-7">
+                <div className="pt-0.5">
+                  <button
+                    type="button"
+                    onClick={onResetFilters}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-all"
+                    style={{
+                      borderColor: `${colors.whiteSubtle}50`,
+                      background: colors.whiteSoft,
+                      color: colors.whiteMuted,
+                    }}
+                  >
+                    <RotateCcw size={11} />
+                    Reset Filters
+                  </button>
+                </div>
+
                 <div className="pt-0.5 -mb-1px">
                   <button
                     type="button"
@@ -464,6 +506,109 @@ export function LeftPanel({
                       </button>
                     ))}
                   </div>
+                </div>
+
+                <div className="pt-0.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Shield size={11} style={{ color: colors.whiteSubtle }} />
+                      <span className="text-[11px]" style={{ color: colors.whiteMuted }}>Crime Risk</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {(['any', 'low', 'medium', 'high'] as const).map((risk) => (
+                      <button
+                        key={risk}
+                        type="button"
+                        onClick={() => onCrimeRiskChange(risk)}
+                        className="py-1 rounded text-[10px] font-medium transition-all border capitalize"
+                        style={crimeRisk === risk
+                          ? { background: `${colors.red}22`, borderColor: `${colors.red}55`, color: '#fca5a5' }
+                          : { background: colors.whiteSoft, borderColor: colors.border, color: colors.whiteSubtle }}
+                      >
+                        {risk}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-0.5 space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <GraduationCap size={11} style={{ color: colors.whiteSubtle }} />
+                    <span className="text-[11px]" style={{ color: colors.whiteMuted }}>Child School Need</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {([
+                      { id: 'elementary', label: 'Elem' },
+                      { id: 'middle', label: 'Middle' },
+                      { id: 'high', label: 'High' },
+                    ] as const).map((group) => {
+                      const active = schoolAgeGroups.includes(group.id);
+                      return (
+                        <button
+                          key={group.id}
+                          type="button"
+                          onClick={() => toggleSchoolGroup(group.id)}
+                          className="py-1 rounded text-[10px] font-medium transition-all border"
+                          style={active
+                            ? { background: `${colors.emerald}22`, borderColor: `${colors.emerald}55`, color: '#6ee7b7' }
+                            : { background: colors.whiteSoft, borderColor: colors.border, color: colors.whiteSubtle }}
+                        >
+                          {group.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px]" style={{ color: colors.whiteSubtle }}>
+                    {schoolAgeGroups.length === 0 ? 'No age group selected (Any)' : `${schoolAgeGroups.length} selected`}
+                  </p>
+                  <div
+                    className="overflow-hidden transition-all duration-300"
+                    style={{
+                      maxHeight: schoolRadiusEnabled ? 72 : 0,
+                      opacity: schoolRadiusEnabled ? 1 : 0,
+                      transform: schoolRadiusEnabled ? 'translateY(0)' : 'translateY(-6px)',
+                    }}
+                  >
+                    <div className="pt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px]" style={{ color: colors.whiteMuted }}>School Radius</span>
+                        <span className="text-[10px] font-semibold tabular-nums" style={{ color: colors.white }}>
+                          {schoolRadiusMiles <= 0 ? 'Any' : `${schoolRadiusMiles.toFixed(1)} mi`}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={10}
+                        step={0.1}
+                        value={schoolRadiusMiles}
+                        onChange={(e) => onSchoolRadiusMilesChange(Number(e.target.value))}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-0.5">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <ShoppingCart size={11} style={{ color: colors.whiteSubtle }} />
+                      <span className="text-[11px]" style={{ color: colors.whiteMuted }}>Grocery Radius</span>
+                    </div>
+                    <span className="text-[10px] font-semibold tabular-nums" style={{ color: colors.white }}>
+                      {groceryRadiusMiles <= 0 ? 'Any' : `${groceryRadiusMiles.toFixed(1)} mi`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={5}
+                    step={0.1}
+                    value={groceryRadiusMiles}
+                    onChange={(e) => onGroceryRadiusMilesChange(Number(e.target.value))}
+                    className="w-full"
+                  />
                 </div>
 
               </div>

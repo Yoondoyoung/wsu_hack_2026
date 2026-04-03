@@ -23,8 +23,18 @@ function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number):
 }
 
 const PAGE_SIZE = 1000;
+const NEARBY_GROCERY_TYPES = new Set([
+  'Grocery Store',
+  'Supermarket',
+  'Health Food',
+  'Specialty Grocery',
+]);
 
 type GenericRow = Record<string, unknown>;
+interface GroceryPoint {
+  lat: number;
+  lng: number;
+}
 
 async function selectAllRows(table: string, columns: string): Promise<GenericRow[]> {
   const rows: GenericRow[] = [];
@@ -40,13 +50,52 @@ async function selectAllRows(table: string, columns: string): Promise<GenericRow
 }
 
 let cachedProperties: GenericRow[] | null = null;
+let cachedGroceryPoints: GroceryPoint[] | null = null;
+
+async function loadGroceryPoints(): Promise<GroceryPoint[]> {
+  if (cachedGroceryPoints) return cachedGroceryPoints;
+  const rows = await selectAllRows('overlay_grocery_points', 'lng, lat, type');
+  cachedGroceryPoints = rows
+    .filter((f) => {
+      const type = typeof f.type === 'string' ? f.type : '';
+      return NEARBY_GROCERY_TYPES.has(type);
+    })
+    .map((f) => ({ lat: Number(f.lat), lng: Number(f.lng) }))
+    .filter((pt) => Number.isFinite(pt.lat) && Number.isFinite(pt.lng));
+  return cachedGroceryPoints;
+}
+
+function nearestGroceryDistanceMiles(lat: number, lng: number, stores: GroceryPoint[]): number | null {
+  if (!stores.length) return null;
+  let best = Number.POSITIVE_INFINITY;
+  for (const s of stores) {
+    const d = haversineMiles(lat, lng, s.lat, s.lng);
+    if (d < best) best = d;
+  }
+  if (!Number.isFinite(best)) return null;
+  return Math.round(best * 100) / 100;
+}
 
 async function loadPropertiesFromSupabase(): Promise<GenericRow[]> {
   if (cachedProperties) return cachedProperties;
+  const groceryPoints = await loadGroceryPoints();
   const rows = await selectAllRows('property_records', 'payload');
   cachedProperties = rows
     .map((row) => row.payload)
-    .filter((payload): payload is GenericRow => Boolean(payload && typeof payload === 'object'));
+    .filter((payload): payload is GenericRow => Boolean(payload && typeof payload === 'object'))
+    .map((payload) => {
+      const coords = payload.coordinates;
+      const lng = Array.isArray(coords) ? Number(coords[0]) : NaN;
+      const lat = Array.isArray(coords) ? Number(coords[1]) : NaN;
+      const nearest =
+        Number.isFinite(lat) && Number.isFinite(lng)
+          ? nearestGroceryDistanceMiles(lat, lng, groceryPoints)
+          : null;
+      return {
+        ...payload,
+        nearestGroceryDistanceMiles: nearest,
+      };
+    });
   console.log(`Loaded ${cachedProperties.length} properties from Supabase`);
   return cachedProperties;
 }
@@ -170,13 +219,6 @@ propertiesRouter.get('/overlays/structures/tiles/:z/:x/:y.pbf', (req, res) => {
     res.status(500).json({ error: 'Failed to generate structure vector tile' });
   }
 });
-
-const NEARBY_GROCERY_TYPES = new Set([
-  'Grocery Store',
-  'Supermarket',
-  'Health Food',
-  'Specialty Grocery',
-]);
 
 propertiesRouter.get('/nearby-grocery', async (req, res) => {
   const lat = parseFloat(req.query.lat as string);

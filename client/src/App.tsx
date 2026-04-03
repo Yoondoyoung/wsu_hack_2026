@@ -12,26 +12,55 @@ import { useProperties } from './hooks/useProperties';
 import { glass, colors } from './design';
 import { calcTCO, TCO_DEFAULTS, type TcoInputs } from './utils/tcoCalculator';
 import type { Property } from './types/property';
+import type { ChatFilterPatch } from './services/chat';
 
 const SNAP_THRESHOLD = 120;        // px — float-card to float-card
 const COMPARE_H_APPROX = 460;      // px — estimated compare view height for proximity detection
 const MAX_COMPARE = 4;
+const DEFAULT_PRICE_RANGE: [number, number] = [0, 3000000];
+const MAX_SCHOOL_RADIUS_MILES = 10;
+const DEFAULT_SCHOOL_RADIUS_MILES = 1;
 
 export type MapPriceMode = 'listing' | 'netMonthly';
+type OnboardingMode = 'pending' | 'browse' | 'guided';
+type CrimeRiskFilter = 'any' | 'low' | 'medium' | 'high';
+type SchoolAgeFilter = 'elementary' | 'middle' | 'high';
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+function schoolMatchesAgeGroup(school: Property['schools'][number], group: SchoolAgeFilter): boolean {
+  const blob = `${school.level ?? ''} ${(school as { grades?: string | null }).grades ?? ''} ${school.type ?? ''}`.toLowerCase();
+  if (group === 'elementary') {
+    return /\belementary\b|\bpk\b|\bk-?6\b|\b1-?6\b|\bk-?5\b/.test(blob);
+  }
+  if (group === 'middle') {
+    return /\bmiddle\b|\bjunior\b|\b6-?8\b|\b7-?8\b/.test(blob);
+  }
+  return /\bhigh\b|\b9-?12\b/.test(blob);
+}
 
 export default function App() {
   const { mapState, setViewMode, toggleOverlay } = useMapState();
-  const { properties, loading } = useProperties();
+  const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>('pending');
+  const shouldLoadProperties = onboardingMode !== 'pending';
+  const { properties, loading } = useProperties(shouldLoadProperties);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 3000000]);
-  const [minSchoolRating, setMinSchoolRating] = useState(0);
+  const [priceRange, setPriceRange] = useState<[number, number]>(DEFAULT_PRICE_RANGE);
   const [mapPriceMode, setMapPriceMode] = useState<MapPriceMode>('listing');
   const [tcoInputs, setTcoInputs] = useState<TcoInputs>(TCO_DEFAULTS);
   const [minBeds, setMinBeds] = useState(0);
   const [minBaths, setMinBaths] = useState(0);
+  const [crimeRisk, setCrimeRisk] = useState<CrimeRiskFilter>('any');
+  const [schoolAgeGroups, setSchoolAgeGroups] = useState<SchoolAgeFilter[]>([]);
+  const [schoolRadiusMiles, setSchoolRadiusMiles] = useState(0);
+  const [groceryRadiusMiles, setGroceryRadiusMiles] = useState(0);
   /** When set, map + list show only these IDs (from chat search_listings). `null` = use slider filters. */
   const [chatListingIds, setChatListingIds] = useState<string[] | null>(null);
+  const [guidedFiltersReady, setGuidedFiltersReady] = useState(false);
+  const prevSchoolGroupCountRef = useRef(0);
 
   /** Refs only — no setState at 60fps (prevents map jitter from full-tree re-renders). */
   const markerPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -60,24 +89,61 @@ export default function App() {
     cardPosRef.current = pos;
   }, []);
 
+  const persistOnboardingMode = useCallback((mode: Exclude<OnboardingMode, 'pending'>) => {
+    setOnboardingMode(mode);
+  }, []);
+
+  const resetAllFilters = useCallback(() => {
+    setPriceRange(DEFAULT_PRICE_RANGE);
+    setMinBeds(0);
+    setMinBaths(0);
+    setCrimeRisk('any');
+    setSchoolAgeGroups([]);
+    setSchoolRadiusMiles(0);
+    setGroceryRadiusMiles(0);
+    setChatListingIds(null);
+    persistOnboardingMode('browse');
+    setGuidedFiltersReady(true);
+  }, [persistOnboardingMode]);
+
+  useEffect(() => {
+    const prev = prevSchoolGroupCountRef.current;
+    const next = schoolAgeGroups.length;
+    if (prev === 0 && next > 0 && schoolRadiusMiles <= 0) {
+      setSchoolRadiusMiles(DEFAULT_SCHOOL_RADIUS_MILES);
+    }
+    prevSchoolGroupCountRef.current = next;
+  }, [schoolAgeGroups, schoolRadiusMiles]);
+
   const filteredProperties = properties.filter((p) => {
     if (p.price < priceRange[0] || p.price > priceRange[1]) return false;
     if (p.beds < minBeds) return false;
     if (p.baths < minBaths) return false;
-    if (minSchoolRating > 0 && p.schools.length > 0) {
-      const maxRating = Math.max(...p.schools.map((s) => s.rating));
-      if (maxRating < minSchoolRating) return false;
+    if (crimeRisk !== 'any' && p.crimeRiskLevel !== crimeRisk) return false;
+    if (schoolAgeGroups.length > 0) {
+      const schoolWithinRadius = p.schools.some((s) => {
+        const dist = Number(s.distance);
+        const withinRadius = schoolRadiusMiles <= 0 || (Number.isFinite(dist) && dist <= schoolRadiusMiles);
+        return withinRadius && schoolAgeGroups.some((group) => schoolMatchesAgeGroup(s, group));
+      });
+      if (!schoolWithinRadius) return false;
+    }
+    if (groceryRadiusMiles > 0) {
+      const d = Number(p.nearestGroceryDistanceMiles);
+      if (!Number.isFinite(d) || d > groceryRadiusMiles) return false;
     }
     return true;
   });
 
   const visibleProperties = useMemo(() => {
+    if (onboardingMode === 'pending') return [];
+    if (onboardingMode === 'guided' && !guidedFiltersReady) return [];
     if (chatListingIds === null) return filteredProperties;
     const byId = new Map(properties.map((p) => [p.id, p] as const));
     return chatListingIds
       .map((id) => byId.get(id))
       .filter((p): p is Property => p != null);
-  }, [chatListingIds, properties, filteredProperties]);
+  }, [onboardingMode, guidedFiltersReady, chatListingIds, properties, filteredProperties]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -86,9 +152,53 @@ export default function App() {
     }
   }, [selectedId, visibleProperties]);
 
+  useEffect(() => {
+    if (selectedId) return;
+    const needsNearbyPoints =
+      (schoolAgeGroups.length > 0 && schoolRadiusMiles > 0) || groceryRadiusMiles > 0;
+    if (!needsNearbyPoints) return;
+    if (visibleProperties.length === 0) return;
+    setSelectedId(visibleProperties[0].id);
+  }, [selectedId, schoolAgeGroups, schoolRadiusMiles, groceryRadiusMiles, visibleProperties]);
+
   const handleChatListingResult = useCallback((listingIds: string[] | undefined) => {
     if (listingIds !== undefined) setChatListingIds(listingIds);
   }, []);
+
+  const handleFilterPatch = useCallback((patch: ChatFilterPatch | undefined) => {
+    if (!patch) return;
+    if (typeof patch.min_price === 'number' || typeof patch.max_price === 'number') {
+      const nextMin = clamp(patch.min_price ?? priceRange[0], 0, 3000000);
+      const nextMax = clamp(patch.max_price ?? priceRange[1], 0, 3000000);
+      setPriceRange([Math.min(nextMin, nextMax), Math.max(nextMin, nextMax)]);
+    }
+    if (typeof patch.min_beds === 'number') setMinBeds(clamp(Math.round(patch.min_beds), 0, 10));
+    if (typeof patch.min_baths === 'number') setMinBaths(clamp(Math.round(patch.min_baths), 0, 10));
+    if (patch.crime_risk && ['any', 'low', 'medium', 'high'].includes(patch.crime_risk)) {
+      setCrimeRisk(patch.crime_risk);
+    }
+    if (Array.isArray(patch.school_age_groups)) {
+      const validGroups = patch.school_age_groups
+        .filter((group): group is SchoolAgeFilter => ['elementary', 'middle', 'high'].includes(group));
+      setSchoolAgeGroups(Array.from(new Set(validGroups)));
+    }
+    if (typeof patch.school_radius_miles === 'number') setSchoolRadiusMiles(clamp(patch.school_radius_miles, 0, MAX_SCHOOL_RADIUS_MILES));
+    if (typeof patch.grocery_radius_miles === 'number') setGroceryRadiusMiles(clamp(patch.grocery_radius_miles, 0, 5));
+    setChatListingIds(null);
+    if (onboardingMode === 'guided') setGuidedFiltersReady(true);
+  }, [onboardingMode, priceRange]);
+
+  const handleChooseBrowse = useCallback(() => {
+    persistOnboardingMode('browse');
+    setGuidedFiltersReady(true);
+    setChatListingIds(null);
+  }, [persistOnboardingMode]);
+
+  const handleChooseGuided = useCallback(() => {
+    persistOnboardingMode('guided');
+    setGuidedFiltersReady(false);
+    setChatListingIds(null);
+  }, [persistOnboardingMode]);
 
   const [routeRequest, setRouteRequest] = useState<{
     from: [number, number];
@@ -302,6 +412,9 @@ export default function App() {
           onMarkerScreenPosition={handleMarkerScreenPosition}
           mapPriceMode={mapPriceMode}
           netMonthlyMap={netMonthlyMap}
+          schoolAgeGroups={schoolAgeGroups}
+          schoolRadiusMiles={schoolRadiusMiles}
+          groceryRadiusMiles={groceryRadiusMiles}
           activeRoute={activeRoute}
           onClearRoute={handleClearRoute}
           onReopenDetail={handleReopenDetail}
@@ -351,14 +464,21 @@ export default function App() {
           onToggleCollapse={() => setLeftCollapsed((v) => !v)}
           priceRange={priceRange}
           onPriceRangeChange={setPriceRange}
-          minSchoolRating={minSchoolRating}
-          onMinSchoolRatingChange={setMinSchoolRating}
           mapPriceMode={mapPriceMode}
           onMapPriceModeChange={setMapPriceMode}
           minBeds={minBeds}
           onMinBedsChange={setMinBeds}
           minBaths={minBaths}
           onMinBathsChange={setMinBaths}
+          crimeRisk={crimeRisk}
+          onCrimeRiskChange={setCrimeRisk}
+          schoolAgeGroups={schoolAgeGroups}
+          onSchoolAgeGroupsChange={setSchoolAgeGroups}
+          schoolRadiusMiles={schoolRadiusMiles}
+          onSchoolRadiusMilesChange={setSchoolRadiusMiles}
+          groceryRadiusMiles={groceryRadiusMiles}
+          onGroceryRadiusMilesChange={setGroceryRadiusMiles}
+          onResetFilters={resetAllFilters}
           tcoInputs={tcoInputs}
           onTcoInputsChange={setTcoInputs}
         />
@@ -422,7 +542,15 @@ export default function App() {
         })()}
       </div>
 
-      <ChatAssistant focusedProperty={chatFocusedProperty} onChatListingResult={handleChatListingResult} />
+      <ChatAssistant
+        focusedProperty={chatFocusedProperty}
+        mode={onboardingMode === 'guided' ? 'guided' : 'browse'}
+        onboardingMode={onboardingMode}
+        onChooseBrowse={handleChooseBrowse}
+        onChooseGuided={handleChooseGuided}
+        onChatListingResult={handleChatListingResult}
+        onFilterPatch={handleFilterPatch}
+      />
 
     </DashboardLayout>
   );

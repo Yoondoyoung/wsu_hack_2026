@@ -77,6 +77,9 @@ interface Props {
   onMarkerScreenPosition?: (pos: { x: number; y: number } | null) => void;
   mapPriceMode: MapPriceMode;
   netMonthlyMap: Map<string, number> | null;
+  schoolAgeGroups: Array<'elementary' | 'middle' | 'high'>;
+  schoolRadiusMiles: number;
+  groceryRadiusMiles: number;
   activeRoute?: {
     geometry: { type: 'LineString'; coordinates: [number, number][] };
     toCoordinates: [number, number];
@@ -114,6 +117,31 @@ interface GroceryPopupData {
   name?: string;
   address?: string;
   type?: string;
+}
+
+function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const r = 3959;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+function schoolMatchesAgeFeature(
+  props: Record<string, unknown>,
+  group: 'elementary' | 'middle' | 'high',
+): boolean {
+  const blob = `${String(props.gradeLevels ?? '')} ${String(props.levelCode ?? '')} ${String(props.type ?? '')}`.toLowerCase();
+  if (group === 'elementary') {
+    return /\belementary\b|\bpk\b|\bk-?6\b|\b1-?6\b|\bk-?5\b/.test(blob);
+  }
+  if (group === 'middle') {
+    return /\bmiddle\b|\bjunior\b|\b6-?8\b|\b7-?8\b/.test(blob);
+  }
+  return /\bhigh\b|\b9-?12\b/.test(blob);
 }
 
 function GlowMarker({
@@ -233,7 +261,22 @@ function getBoundsFromMap(map: ReturnType<MapRef['getMap']>, padFraction = 0.12)
   };
 }
 
-function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSelectProperty, onMarkerScreenPosition, mapPriceMode, netMonthlyMap, activeRoute, onClearRoute, onReopenDetail }: Props) {
+function MapViewInner({
+  viewMode,
+  activeOverlays,
+  properties,
+  selectedId,
+  onSelectProperty,
+  onMarkerScreenPosition,
+  mapPriceMode,
+  netMonthlyMap,
+  schoolAgeGroups,
+  schoolRadiusMiles,
+  groceryRadiusMiles,
+  activeRoute,
+  onClearRoute,
+  onReopenDetail,
+}: Props) {
   const mapRef = useRef<MapRef>(null);
   const [overlayData, setOverlayData] = useState<Record<string, GeoJSON.FeatureCollection>>({});
   const overlayDataRef = useRef(overlayData);
@@ -245,6 +288,10 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
   const [crimePopup, setCrimePopup] = useState<CrimePopupData | null>(null);
   const [schoolPopup, setSchoolPopup] = useState<SchoolPopupData | null>(null);
   const [groceryPopup, setGroceryPopup] = useState<GroceryPopupData | null>(null);
+  const [nearbyGroceryData, setNearbyGroceryData] = useState<GeoJSON.FeatureCollection>({
+    type: 'FeatureCollection',
+    features: [],
+  });
   const structuresTileUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/api/properties/overlays/structures/tiles/{z}/{x}/{y}.pbf`
@@ -255,6 +302,12 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
     bearing: 0,
   });
   const [viewBounds, setViewBounds] = useState<ViewBounds | null>(null);
+  const selectedProperty = useMemo(
+    () => (selectedId ? properties.find((p) => p.id === selectedId) ?? null : null),
+    [selectedId, properties],
+  );
+  const schoolFocusEnabled = Boolean(selectedProperty && schoolAgeGroups.length > 0 && schoolRadiusMiles > 0);
+  const groceryFocusEnabled = Boolean(selectedProperty && groceryRadiusMiles > 0);
 
   // Update pitch when view mode changes
   useEffect(() => {
@@ -263,22 +316,19 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
 
   // Fly to selected property — keep current zoom if already closer than the focus floor (avoid zoom-out).
   useEffect(() => {
-    if (selectedId && mapRef.current) {
-      const property = properties.find((p) => p.id === selectedId);
-      if (property) {
-        const map = mapRef.current.getMap();
-        const currentZoom = map.getZoom();
-        const focusFloor = 15;
-        mapRef.current.flyTo({
-          center: [property.coordinates[0], property.coordinates[1]],
-          zoom: Math.max(currentZoom, focusFloor),
-          duration: 450,
-          essential: true,
-          offset: [-185, 0],
-        });
-      }
+    if (selectedProperty && mapRef.current) {
+      const map = mapRef.current.getMap();
+      const currentZoom = map.getZoom();
+      const focusFloor = 15;
+      mapRef.current.flyTo({
+        center: [selectedProperty.coordinates[0], selectedProperty.coordinates[1]],
+        zoom: Math.max(currentZoom, focusFloor),
+        duration: 450,
+        essential: true,
+        offset: [-185, 0],
+      });
     }
-  }, [selectedId, properties]);
+  }, [selectedProperty]);
 
   // Fit map to show full walking route when activeRoute is set
   useEffect(() => {
@@ -303,7 +353,7 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
     if (!onMarkerScreenPosition) return;
     const cb = onMarkerScreenPosition;
     let rafId = 0;
-    const property = selectedId ? properties.find((p) => p.id === selectedId) : null;
+    const property = selectedProperty;
 
     function tick() {
       if (property && mapRef.current) {
@@ -319,12 +369,13 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
     }
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [selectedId, properties, onMarkerScreenPosition]);
+  }, [selectedProperty, onMarkerScreenPosition]);
 
-  // Fetch overlay GeoJSON when the active set changes (do NOT depend on overlayData — that re-fired
-  // the effect on every fetch and could block or thrash layers). Skip if already cached in ref.
+  // Fetch overlay GeoJSON when needed (active layer OR focused-radius view needs schools).
   useEffect(() => {
-    activeOverlays.forEach((overlay) => {
+    const overlaysToFetch = new Set(activeOverlays);
+    if (schoolFocusEnabled) overlaysToFetch.add('schools');
+    overlaysToFetch.forEach((overlay) => {
       if (overlay === 'grocery') return; // URL-backed source; do not pull multi‑MB JSON into React state
       if (overlay === 'structures') return; // vector tiles only; no overview GeoJSON dots
       if (overlayDataRef.current[overlay]) return;
@@ -336,7 +387,25 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
           console.error(`[MapView] Failed to load overlay "${overlay}"`, err);
         });
     });
-  }, [overlayIdsKey, activeOverlays]); // activeOverlays: forEach target; overlayIdsKey: stable trigger when set contents change
+  }, [overlayIdsKey, activeOverlays, schoolFocusEnabled]); // overlayIdsKey: stable trigger when overlay set changes
+
+  useEffect(() => {
+    if (!groceryFocusEnabled || !selectedProperty) {
+      setNearbyGroceryData({ type: 'FeatureCollection', features: [] });
+      return;
+    }
+    const [lng, lat] = selectedProperty.coordinates;
+    fetch(`/api/properties/nearby-grocery?lat=${lat}&lng=${lng}&miles=${groceryRadiusMiles}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.type === 'FeatureCollection' && Array.isArray(data?.features)) {
+          setNearbyGroceryData(data as GeoJSON.FeatureCollection);
+          return;
+        }
+        setNearbyGroceryData({ type: 'FeatureCollection', features: [] });
+      })
+      .catch(() => setNearbyGroceryData({ type: 'FeatureCollection', features: [] }));
+  }, [groceryFocusEnabled, selectedProperty, groceryRadiusMiles]);
 
   // Only render markers visible in the current viewport (+12% padding to avoid pop-in at edges).
   // The selected marker is always included so it stays visible even after fly-to.
@@ -350,6 +419,27 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
     });
   }, [properties, viewBounds, selectedId]);
 
+  const focusedSchoolData = useMemo<GeoJSON.FeatureCollection>(() => {
+    if (!schoolFocusEnabled || !selectedProperty) {
+      return { type: 'FeatureCollection', features: [] };
+    }
+    const schools = overlayData.schools;
+    if (!schools?.features?.length) {
+      return { type: 'FeatureCollection', features: [] };
+    }
+    const [lng, lat] = selectedProperty.coordinates;
+    const features = schools.features.filter((f) => {
+      if (f.geometry?.type !== 'Point') return false;
+      const coords = f.geometry.coordinates as number[] | undefined;
+      if (!coords || coords.length < 2) return false;
+      const d = haversineMiles(lat, lng, Number(coords[1]), Number(coords[0]));
+      if (!Number.isFinite(d) || d > schoolRadiusMiles) return false;
+      const props = (f.properties ?? {}) as Record<string, unknown>;
+      return schoolAgeGroups.some((group) => schoolMatchesAgeFeature(props, group));
+    });
+    return { type: 'FeatureCollection', features };
+  }, [schoolFocusEnabled, selectedProperty, overlayData.schools, schoolRadiusMiles, schoolAgeGroups]);
+
   const handleMarkerClick = useCallback(
     (id: string) => {
       onSelectProperty(id);
@@ -358,7 +448,9 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
   );
 
   const handleMapClick = useCallback((evt: any) => {
-    const schoolFeature = evt.features?.find((f: any) => f.layer?.id === 'schools-points');
+    const schoolFeature = evt.features?.find((f: any) =>
+      f.layer?.id === 'schools-points' || f.layer?.id === 'schools-focus-points',
+    );
     if (schoolFeature) {
       const coords = schoolFeature.geometry?.coordinates;
       if (Array.isArray(coords) && coords.length >= 2) {
@@ -381,7 +473,9 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
       }
     }
 
-    const groceryFeature = evt.features?.find((f: any) => f.layer?.id === 'grocery-points');
+    const groceryFeature = evt.features?.find((f: any) =>
+      f.layer?.id === 'grocery-points' || f.layer?.id === 'grocery-focus-points',
+    );
     if (groceryFeature) {
       const coords = groceryFeature.geometry?.coordinates;
       if (Array.isArray(coords) && coords.length >= 2) {
@@ -444,6 +538,8 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
           ...(activeOverlays.has('crime') ? ['crime-points'] : []),
           ...(activeOverlays.has('schools') ? ['schools-points'] : []),
           ...(activeOverlays.has('grocery') ? ['grocery-points'] : []),
+          ...(schoolFocusEnabled ? ['schools-focus-points'] : []),
+          ...(groceryFocusEnabled ? ['grocery-focus-points'] : []),
         ]}
         mapStyle={MAP_STYLES[viewMode]}
         mapboxAccessToken={MAPBOX_TOKEN}
@@ -530,6 +626,38 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
                 'circle-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.75, 14, 0.9],
                 'circle-stroke-color': '#431407',
                 'circle-stroke-width': 1,
+              }}
+            />
+          </Source>
+        )}
+
+        {schoolFocusEnabled && focusedSchoolData.features.length > 0 && (
+          <Source id="source-schools-focus" type="geojson" data={focusedSchoolData}>
+            <Layer
+              id="schools-focus-points"
+              type="circle"
+              paint={{
+                'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 4, 13, 6, 16, 8],
+                'circle-color': '#34d399',
+                'circle-opacity': 0.92,
+                'circle-stroke-color': '#ecfeff',
+                'circle-stroke-width': 1.2,
+              }}
+            />
+          </Source>
+        )}
+
+        {groceryFocusEnabled && nearbyGroceryData.features.length > 0 && (
+          <Source id="source-grocery-focus" type="geojson" data={nearbyGroceryData}>
+            <Layer
+              id="grocery-focus-points"
+              type="circle"
+              paint={{
+                'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 4.5, 13, 6.5, 16, 8.5],
+                'circle-color': '#fb923c',
+                'circle-opacity': 0.96,
+                'circle-stroke-color': '#fff7ed',
+                'circle-stroke-width': 1.2,
               }}
             />
           </Source>
@@ -666,7 +794,7 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
             offset={14}
             style={{ zIndex: 30 }}
           >
-            <div style={{ background: '#1a1a2e', border: `1px solid ${colors.indigo}60`, borderRadius: 10, padding: '8px 12px', minWidth: 160, maxWidth: 220, boxShadow: '0 4px 20px rgba(0,0,0,0.6)' }}>
+            <div style={{ background: '#1a1a2e', border: `1px solid ${colors.blue}60`, borderRadius: 10, padding: '8px 12px', minWidth: 160, maxWidth: 220, boxShadow: '0 4px 20px rgba(0,0,0,0.6)' }}>
               <div className="flex items-center gap-2 mb-1">
                 <span style={{ fontSize: 14 }}>🛒</span>
                 <p style={{ color: '#e2e2f0', fontSize: 12, fontWeight: 600, margin: 0, lineHeight: 1.3 }}>{activeRoute.toName}</p>
@@ -734,7 +862,7 @@ function MapViewInner({ viewMode, activeOverlays, properties, selectedId, onSele
             <button
               onClick={onReopenDetail}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[11px] font-medium transition-all hover:brightness-110 active:scale-95"
-              style={{ background: '#1a1a2eee', border: `1px solid ${colors.indigo}60`, color: '#a5b4fc', boxShadow: '0 2px 12px rgba(0,0,0,0.4)' }}
+              style={{ background: '#1a1a2eee', border: `1px solid ${colors.blue}60`, color: '#a5b4fc', boxShadow: '0 2px 12px rgba(0,0,0,0.4)' }}
             >
               <span>🏠</span>
               <span className="truncate max-w-[220px]">{activeRoute.sourcePropertyAddress}</span>

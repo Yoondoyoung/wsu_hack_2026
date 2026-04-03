@@ -32,6 +32,61 @@ interface SearchListingsArgs {
   limit?: number;
 }
 
+type ChatMode = 'browse' | 'guided';
+type CrimeRiskFilter = 'any' | 'low' | 'medium' | 'high';
+type SchoolAgeFilter = 'elementary' | 'middle' | 'high';
+
+interface SetFiltersArgs {
+  min_price?: number;
+  max_price?: number;
+  min_beds?: number;
+  min_baths?: number;
+  crime_risk?: CrimeRiskFilter;
+  school_age_groups?: SchoolAgeFilter[];
+  school_radius_miles?: number;
+  grocery_radius_miles?: number;
+  unsupported_constraints?: string[];
+}
+
+function extractGuidedPatchFromText(text: string): SetFiltersArgs | undefined {
+  const lower = text.toLowerCase();
+  const patch: SetFiltersArgs = {};
+
+  const underK = lower.match(/(?:under|below|less than)\s*\$?\s*(\d{2,4})\s*k\b/);
+  if (underK) {
+    patch.max_price = Number(underK[1]) * 1000;
+  } else {
+    const underNum = lower.match(/(?:under|below|less than)\s*\$?\s*([0-9][0-9,]*)\b/);
+    if (underNum) {
+      patch.max_price = Number(underNum[1].replace(/,/g, ''));
+    }
+  }
+
+  const minBeds = lower.match(/(\d+)\s*\+?\s*(?:bed|beds|bedroom|bedrooms)\b/);
+  if (minBeds) patch.min_beds = Number(minBeds[1]);
+
+  const minBaths = lower.match(/(\d+)\s*\+?\s*(?:bath|baths|bathroom|bathrooms)\b/);
+  if (minBaths) patch.min_baths = Number(minBaths[1]);
+
+  const groups: SchoolAgeFilter[] = [];
+  if (/\belementary\b|\bprimary\b|\bkid\b|\bkids\b|\bchild\b|\bchildren\b/.test(lower)) groups.push('elementary');
+  if (/\bmiddle\b|\bmiddle school\b|\bjunior\b/.test(lower)) groups.push('middle');
+  if (/\bhigh school\b|\bteen\b|\bteens\b/.test(lower)) groups.push('high');
+  if (groups.length > 0) patch.school_age_groups = Array.from(new Set(groups));
+
+  const mile = lower.match(/(\d+(?:\.\d+)?)\s*(?:mile|miles|mi)\b/);
+  if (mile) patch.school_radius_miles = Number(mile[1]);
+
+  const groceryMentioned = /\bgrocery\b|\bsupermarket\b|\bmarket\b|\bmart\b/.test(lower);
+  const nearMentioned = /\bnear\b|\bnearby\b|\bclose\b|\bwalkable\b|\bwalking distance\b/.test(lower);
+  if (groceryMentioned && nearMentioned) {
+    patch.grocery_radius_miles = 1;
+  }
+
+  const hasAny = Object.keys(patch).length > 0;
+  return hasAny ? patch : undefined;
+}
+
 function num(row: GenericRow, key: string): number {
   const v = row[key];
   if (typeof v === 'number' && !Number.isNaN(v)) return v;
@@ -122,12 +177,52 @@ function searchListings(rows: GenericRow[], args: SearchListingsArgs): {
   return { listings, total_matched, matchingIdsForUi, toolPayload };
 }
 
-function buildSystemPrompt(focusedProperty: unknown): string {
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+function normalizeFilterPatch(args: SetFiltersArgs): { patch: SetFiltersArgs; unsupported: string[] } {
+  const patch: SetFiltersArgs = {};
+  if (typeof args.min_price === 'number') patch.min_price = clamp(Math.round(args.min_price), 0, 3000000);
+  if (typeof args.max_price === 'number') patch.max_price = clamp(Math.round(args.max_price), 0, 3000000);
+  if (typeof args.min_beds === 'number') patch.min_beds = clamp(Math.round(args.min_beds), 0, 10);
+  if (typeof args.min_baths === 'number') patch.min_baths = clamp(Math.round(args.min_baths), 0, 10);
+  if (args.crime_risk && ['any', 'low', 'medium', 'high'].includes(args.crime_risk)) patch.crime_risk = args.crime_risk;
+  if (Array.isArray(args.school_age_groups)) {
+    const valid = args.school_age_groups.filter((group): group is SchoolAgeFilter =>
+      ['elementary', 'middle', 'high'].includes(group),
+    );
+    if (valid.length > 0) {
+      const deduped = Array.from(new Set(valid));
+      patch.school_age_groups = deduped;
+      // UX default: if user specified child school ages but omitted distance,
+      // apply 1 mile.
+      if (typeof args.school_radius_miles !== 'number') {
+        patch.school_radius_miles = 1;
+      }
+    }
+  }
+  if (typeof args.school_radius_miles === 'number') patch.school_radius_miles = clamp(args.school_radius_miles, 0, 10);
+  if (typeof args.grocery_radius_miles === 'number') patch.grocery_radius_miles = clamp(args.grocery_radius_miles, 0, 5);
+  const unsupported = Array.isArray(args.unsupported_constraints)
+    ? args.unsupported_constraints
+        .map((v) => (typeof v === 'string' ? v.trim() : ''))
+        .filter((v) => v.length > 0)
+        .slice(0, 6)
+    : [];
+  return { patch, unsupported };
+}
+
+function buildSystemPrompt(focusedProperty: unknown, mode: ChatMode): string {
   let base =
     CHAT_SYSTEM_PROMPT +
     '\n\nYou can call the search_listings tool to find real homes from the app’s Salt Lake area listing database. When the user asks for homes matching price, beds, or location keywords, use the tool. Describe only listings returned by the tool; do not invent addresses or prices.' +
     '\n\nAfter search_listings returns results: the app shows those homes in the right-hand list and on the map (properties_shown_in_app matches what the user sees; use total_matched for how many fit the search). If ids_truncated is true, say the app shows the first N matches of a larger set. Keep your chat reply short (2–4 sentences). Briefly confirm the criteria you used, state roughly how many matches there were (use total_matched from the tool if helpful), and say the matches are shown in the list—do not enumerate addresses, prices, or bed counts in the chat. If there are zero matches, say so in one or two sentences and suggest relaxing filters. Match the user’s language (e.g. Korean if they wrote in Korean).' +
     '\n\nFor mortgage or general questions that do not require search_listings, answer as usual with appropriate detail.';
+  if (mode === 'guided') {
+    base +=
+      '\n\nWhen the user asks you to narrow homes by constraints, call set_filters with only supported left-panel filters: min_price, max_price, min_beds, min_baths, crime_risk, school_age_groups, school_radius_miles, grocery_radius_miles. school_age_groups must be an array and can include multiple values (elementary, middle, high) for multiple children. IMPORTANT: Do not ask for every filter field. Apply only what the user already provided and leave unspecified filters unchanged. If the user specifies child school age groups but omits school distance, leave school_radius_miles empty and the app will auto-apply a 1-mile default radius. If the user says grocery should be near/close but gives no distance, set grocery_radius_miles to 1. Only ask a follow-up question when the user request is ambiguous or contradictory. If user requested constraints that do not map to those fields, list them in unsupported_constraints and politely explain those cannot be auto-filtered right now.';
+  }
 
   if (
     focusedProperty &&
@@ -171,6 +266,36 @@ const SEARCH_LISTINGS_TOOL = {
   },
 };
 
+const SET_FILTERS_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'set_filters',
+    description:
+      'Prepare a left-panel filter patch from the user constraints. Use for guided filtering. Include unsupported_constraints if some requested conditions cannot be mapped to current filters.',
+    parameters: {
+      type: 'object',
+      properties: {
+        min_price: { type: 'number' },
+        max_price: { type: 'number' },
+        min_beds: { type: 'integer' },
+        min_baths: { type: 'integer' },
+        crime_risk: { type: 'string', enum: ['any', 'low', 'medium', 'high'] },
+        school_age_groups: {
+          type: 'array',
+          items: { type: 'string', enum: ['elementary', 'middle', 'high'] },
+        },
+        school_radius_miles: { type: 'number' },
+        grocery_radius_miles: { type: 'number' },
+        unsupported_constraints: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Any requested constraints that cannot be applied by current left-panel filters.',
+        },
+      },
+    },
+  },
+};
+
 export const chatRouter = Router();
 
 chatRouter.post('/chat', async (req, res) => {
@@ -180,7 +305,11 @@ chatRouter.post('/chat', async (req, res) => {
     return;
   }
 
-  const { messages: raw, focusedProperty } = req.body as { messages?: unknown; focusedProperty?: unknown };
+  const { messages: raw, focusedProperty, mode: rawMode } = req.body as {
+    messages?: unknown;
+    focusedProperty?: unknown;
+    mode?: unknown;
+  };
   if (!Array.isArray(raw)) {
     res.status(400).json({ error: 'Request body must include messages: array' });
     return;
@@ -201,7 +330,9 @@ chatRouter.post('/chat', async (req, res) => {
     return;
   }
 
-  const systemContent = buildSystemPrompt(focusedProperty ?? null);
+  const mode: ChatMode = rawMode === 'guided' ? 'guided' : 'browse';
+  const latestUserText = [...parsed].reverse().find((m) => m.role === 'user')?.content ?? '';
+  const systemContent = buildSystemPrompt(focusedProperty ?? null, mode);
 
   const recent = parsed.slice(-MAX_MESSAGES);
   let total = systemContent.length;
@@ -229,6 +360,8 @@ chatRouter.post('/chat', async (req, res) => {
   let searchListingsInvoked = false;
   const accumulatedListingIds: string[] = [];
   const seenIds = new Set<string>();
+  let latestFilterPatch: SetFiltersArgs | undefined;
+  let unsupportedConstraints: string[] | undefined;
 
   function appendListingIdsFromSearch(ids: string[]) {
     searchListingsInvoked = true;
@@ -244,7 +377,7 @@ chatRouter.post('/chat', async (req, res) => {
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages,
-        tools: [SEARCH_LISTINGS_TOOL],
+        tools: [SEARCH_LISTINGS_TOOL, SET_FILTERS_TOOL],
         tool_choice: 'auto',
         max_tokens: 1024,
       });
@@ -260,6 +393,23 @@ chatRouter.post('/chat', async (req, res) => {
         messages.push(choice);
         for (const tc of toolCalls) {
           if (tc.type !== 'function') continue;
+          if (tc.function.name === 'set_filters') {
+            let args: SetFiltersArgs = {};
+            try {
+              args = JSON.parse(tc.function.arguments || '{}') as SetFiltersArgs;
+            } catch {
+              args = {};
+            }
+            const { patch, unsupported } = normalizeFilterPatch(args);
+            latestFilterPatch = patch;
+            unsupportedConstraints = unsupported.length ? unsupported : undefined;
+            messages.push({
+              role: 'tool',
+              tool_call_id: tc.id,
+              content: JSON.stringify({ applied: patch, unsupported_constraints: unsupported }),
+            });
+            continue;
+          }
           if (tc.function.name !== 'search_listings') {
             messages.push({
               role: 'tool',
@@ -292,9 +442,33 @@ chatRouter.post('/chat', async (req, res) => {
         return;
       }
 
-      const payload: { message: string; listingIds?: string[] } = { message: text };
+      const payload: {
+        message: string;
+        listingIds?: string[];
+        filterPatch?: SetFiltersArgs;
+        unsupportedConstraints?: string[];
+      } = { message: text };
       if (searchListingsInvoked) {
         payload.listingIds = accumulatedListingIds;
+      }
+      let effectiveFilterPatch = latestFilterPatch;
+      if (mode === 'guided' && (!effectiveFilterPatch || Object.keys(effectiveFilterPatch).length === 0)) {
+        const fallback = extractGuidedPatchFromText(latestUserText);
+        if (fallback) {
+          const normalized = normalizeFilterPatch(fallback);
+          if (Object.keys(normalized.patch).length > 0) {
+            effectiveFilterPatch = normalized.patch;
+          }
+        }
+      }
+
+      if (effectiveFilterPatch && Object.keys(effectiveFilterPatch).length > 0) {
+        payload.filterPatch = effectiveFilterPatch;
+      } else if (latestFilterPatch && Object.keys(latestFilterPatch).length > 0) {
+        payload.filterPatch = latestFilterPatch;
+      }
+      if (unsupportedConstraints?.length) {
+        payload.unsupportedConstraints = unsupportedConstraints;
       }
       res.json(payload);
       return;

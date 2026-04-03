@@ -12,6 +12,9 @@ interface Props {
   onMarkerScreenPosition?: (pos: { x: number; y: number } | null) => void;
   mapPriceMode: MapPriceMode;
   netMonthlyMap: Map<string, number> | null;
+  schoolAgeGroups: Array<'elementary' | 'middle' | 'high'>;
+  schoolRadiusMiles: number;
+  groceryRadiusMiles: number;
   activeRoute?: {
     geometry: { type: 'LineString'; coordinates: [number, number][] };
     toCoordinates: [number, number];

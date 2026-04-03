@@ -3,17 +3,57 @@ import { MessageCircle, X, Send, Loader2, Trash2 } from 'lucide-react';
 import { useChat } from '../../hooks/useChat';
 import { colors, glass } from '../../design';
 import type { Property } from '../../types/property';
+import type { ChatFilterPatch } from '../../services/chat';
 
 interface Props {
   focusedProperty?: Property | null;
+  mode: 'browse' | 'guided';
+  onboardingMode: 'pending' | 'browse' | 'guided';
+  onChooseBrowse: () => void;
+  onChooseGuided: () => void;
   onChatListingResult?: (listingIds: string[] | undefined) => void;
+  onFilterPatch?: (patch: ChatFilterPatch | undefined) => void;
 }
 
-export function ChatAssistant({ focusedProperty = null, onChatListingResult }: Props) {
+export function ChatAssistant({
+  focusedProperty = null,
+  mode,
+  onboardingMode,
+  onChooseBrowse,
+  onChooseGuided,
+  onChatListingResult,
+  onFilterPatch,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
-  const { messages, loading, error, sendUserMessage, clear } = useChat(focusedProperty, onChatListingResult);
+  const [unsupportedNotes, setUnsupportedNotes] = useState<string[] | null>(null);
+  const {
+    messages,
+    loading,
+    error,
+    sendUserMessage,
+    clear,
+    appendAssistantMessage,
+  } = useChat(
+    focusedProperty,
+    mode,
+    onChatListingResult,
+    (patch, unsupported) => {
+      onFilterPatch?.(patch);
+      if (unsupported?.length) setUnsupportedNotes(unsupported);
+    },
+  );
   const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (onboardingMode === 'pending') setOpen(true);
+  }, [onboardingMode]);
+
+  useEffect(() => {
+    if (!unsupportedNotes?.length) return;
+    appendAssistantMessage(`I can't apply these conditions with the current left filters yet: ${unsupportedNotes.join(', ')}`);
+    setUnsupportedNotes(null);
+  }, [unsupportedNotes, appendAssistantMessage]);
 
   useEffect(() => {
     if (!open) return;
@@ -30,6 +70,7 @@ export function ChatAssistant({ focusedProperty = null, onChatListingResult }: P
 
   /** Sit above map, to the left of the 360px listings panel + gutter */
   const mapRightOffset = 'calc(360px + 1.5rem)';
+  const onboardingPending = onboardingMode === 'pending';
 
   return (
     <>
@@ -66,9 +107,13 @@ export function ChatAssistant({ focusedProperty = null, onChatListingResult }: P
             <div className="min-w-0">
               <p className="text-sm font-bold" style={{ color: colors.white }}>Mortgage &amp; Real Estate</p>
               <p className="text-[10px] mt-0.5 truncate" style={{ color: colors.whiteMuted }} title={focusedProperty?.address}>
-                {focusedProperty
+                {onboardingPending
+                  ? 'Welcome! Choose how you want to start.'
+                  : focusedProperty
                   ? `Focused: ${focusedProperty.address}`
-                  : 'Ask about loans, listings search, or select a home on the map'}
+                  : mode === 'guided'
+                    ? 'Tell me your conditions and I will apply left filters for you.'
+                    : 'Ask about loans, listings search, or select a home on the map'}
               </p>
             </div>
             <button
@@ -86,9 +131,43 @@ export function ChatAssistant({ focusedProperty = null, onChatListingResult }: P
             ref={listRef}
             className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-[200px] max-h-[320px]"
           >
+            {onboardingPending && (
+              <div
+                className="text-xs leading-relaxed rounded-xl px-3 py-2 mr-auto border"
+                style={{ background: colors.whiteTint, color: colors.white, borderColor: colors.border }}
+              >
+                Hi! I am your home-finding assistant. Would you like to browse on your own, or should I narrow listings by your conditions?
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChooseBrowse();
+                      appendAssistantMessage('Great. I will show all listings so you can browse freely.');
+                    }}
+                    className="px-2.5 py-1 rounded-lg text-[11px] border"
+                    style={{ borderColor: `${colors.cyan}66`, color: colors.cyan, background: `${colors.cyan}18` }}
+                  >
+                    I will browse myself
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChooseGuided();
+                      appendAssistantMessage('Great. Tell me your budget, beds, baths, crime risk, school age groups (multi-select), school distance, and grocery distance, and I will apply them to the left filters.');
+                    }}
+                    className="px-2.5 py-1 rounded-lg text-[11px] border"
+                    style={{ borderColor: `${colors.emerald}66`, color: '#6ee7b7', background: 'rgba(16,185,129,0.14)' }}
+                  >
+                    Narrow for me
+                  </button>
+                </div>
+              </div>
+            )}
             {messages.length === 0 && !loading && (
               <p className="text-xs leading-relaxed px-1" style={{ color: colors.whiteMuted }}>
-                Ask about this listing when one is selected, search homes (e.g. “3 bed under $500k near 84106”), or mortgages and buying. What would you like to know?
+                {mode === 'guided'
+                  ? 'Share your conditions and I will auto-adjust the left filters. Example: under $700k, 3+ beds, low crime, elementary + middle school within 1 mile.'
+                  : 'Ask about this listing when one is selected, search homes (e.g. “3 bed under $500k near 84106”), or mortgages and buying. What would you like to know?'}
               </p>
             )}
             {messages.map((m, i) => (
@@ -124,7 +203,7 @@ export function ChatAssistant({ focusedProperty = null, onChatListingResult }: P
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a question…"
-              disabled={loading}
+              disabled={loading || onboardingPending}
               className="flex-1 min-w-0 rounded-xl px-3 py-2 text-xs outline-none"
               style={{
                 background: colors.bgPanelDense,
@@ -134,7 +213,7 @@ export function ChatAssistant({ focusedProperty = null, onChatListingResult }: P
             />
             <button
               type="submit"
-              disabled={loading || !input.trim()}
+              disabled={loading || !input.trim() || onboardingPending}
               className="flex-shrink-0 rounded-xl px-3 py-2 disabled:opacity-40"
               style={{ background: colors.cyan + '25', color: colors.cyan, border: `1px solid ${colors.cyan}40` }}
             >

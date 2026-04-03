@@ -6,13 +6,19 @@ import type { Property } from '../../types/property';
 
 interface Props {
   focusedProperty?: Property | null;
+  /** Homes open in Compare view (2–4); passed to the assistant as context. */
+  compareProperties?: Property[] | null;
   onChatListingResult?: (listingIds: string[] | undefined) => void;
 }
 
-export function ChatAssistant({ focusedProperty = null, onChatListingResult }: Props) {
+export function ChatAssistant({ focusedProperty = null, compareProperties = null, onChatListingResult }: Props) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
-  const { messages, loading, error, sendUserMessage, clear } = useChat(focusedProperty, onChatListingResult);
+  const { messages, loading, error, sendUserMessage, clear } = useChat(
+    focusedProperty,
+    onChatListingResult,
+    compareProperties,
+  );
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -88,7 +94,9 @@ export function ChatAssistant({ focusedProperty = null, onChatListingResult }: P
           >
             {messages.length === 0 && !loading && (
               <p className="text-xs leading-relaxed px-1" style={{ color: colors.whiteMuted }}>
-                Ask about this listing when one is selected, search homes (e.g. “3 bed under $500k near 84106”), or mortgages and buying. What would you like to know?
+                {compareProperties && compareProperties.length >= 2
+                  ? 'Ask about these homes side by side (price, schools, crime risk, tradeoffs), search listings, or mortgages. What would you like to know?'
+                  : 'Ask about this listing when one is selected, search homes (e.g. “3 bed under $500k near 84106”), or mortgages and buying. What would you like to know?'}
               </p>
             )}
             {messages.map((m, i) => (

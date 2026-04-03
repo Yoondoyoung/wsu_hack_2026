@@ -30,6 +30,25 @@ interface SearchListingsArgs {
   min_beds?: number;
   max_beds?: number;
   limit?: number;
+  /**
+   * Worst acceptable crime tier (from listing payload `crimeRiskLevel`, computed vs regional data at ingest).
+   * low = only low; medium = low+medium; high = no extra crime filter.
+   */
+  max_crime_risk_tier?: 'low' | 'medium' | 'high';
+}
+
+const CRIME_TIER_ORDER: Record<string, number> = { low: 0, medium: 1, high: 2 };
+
+function crimeRiskTierOrder(row: GenericRow): number | null {
+  const raw = str(row, 'crimeRiskLevel').toLowerCase();
+  if (raw in CRIME_TIER_ORDER) return CRIME_TIER_ORDER[raw]!;
+  return null;
+}
+
+function matchesMaxCrimeRiskTier(row: GenericRow, maxTier: 'low' | 'medium' | 'high'): boolean {
+  const propOrder = crimeRiskTierOrder(row);
+  if (propOrder === null) return false;
+  return propOrder <= CRIME_TIER_ORDER[maxTier]!;
 }
 
 function num(row: GenericRow, key: string): number {
@@ -61,6 +80,12 @@ function searchListings(rows: GenericRow[], args: SearchListingsArgs): {
     const beds = num(row, 'beds');
     if (args.min_beds != null && beds < args.min_beds) return false;
     if (args.max_beds != null && beds > args.max_beds) return false;
+    if (
+      args.max_crime_risk_tier === 'low' ||
+      args.max_crime_risk_tier === 'medium'
+    ) {
+      if (!matchesMaxCrimeRiskTier(row, args.max_crime_risk_tier)) return false;
+    }
     return true;
   });
 
@@ -105,6 +130,7 @@ function searchListings(rows: GenericRow[], args: SearchListingsArgs): {
     sqft: num(row, 'sqft'),
     homeType: str(row, 'homeType') || str(row, 'propertyType'),
     detailUrl: str(row, 'detailUrl'),
+    crimeRiskLevel: str(row, 'crimeRiskLevel') || undefined,
   }));
 
   const idsTruncated = total_matched > matchingIdsForUi.length;
@@ -122,12 +148,24 @@ function searchListings(rows: GenericRow[], args: SearchListingsArgs): {
   return { listings, total_matched, matchingIdsForUi, toolPayload };
 }
 
-function buildSystemPrompt(focusedProperty: unknown): string {
+function buildSystemPrompt(focusedProperty: unknown, compareProperties: unknown): string {
   let base =
     CHAT_SYSTEM_PROMPT +
-    '\n\nYou can call the search_listings tool to find real homes from the app’s Salt Lake area listing database. When the user asks for homes matching price, beds, or location keywords, use the tool. Describe only listings returned by the tool; do not invent addresses or prices.' +
+    '\n\nYou can call the search_listings tool to find real homes from the app’s Salt Lake area listing database. Each listing includes a precomputed crimeRiskLevel (low/medium/high) from regional incident data—use parameter max_crime_risk_tier: low when the user wants the lowest tier only; medium to allow low and medium. When the user asks for safe areas or low crime, call search_listings with max_crime_risk_tier rather than giving only generic neighborhood advice. When the user asks for homes matching price, beds, or location keywords, use the tool. Describe only listings returned by the tool; do not invent addresses or prices.' +
     '\n\nAfter search_listings returns results: the app shows those homes in the right-hand list and on the map (properties_shown_in_app matches what the user sees; use total_matched for how many fit the search). If ids_truncated is true, say the app shows the first N matches of a larger set. Keep your chat reply short (2–4 sentences). Briefly confirm the criteria you used, state roughly how many matches there were (use total_matched from the tool if helpful), and say the matches are shown in the list—do not enumerate addresses, prices, or bed counts in the chat. If there are zero matches, say so in one or two sentences and suggest relaxing filters. Match the user’s language (e.g. Korean if they wrote in Korean).' +
     '\n\nFor mortgage or general questions that do not require search_listings, answer as usual with appropriate detail.';
+
+  const compareList =
+    Array.isArray(compareProperties) && compareProperties.length > 0
+      ? compareProperties.filter((x) => x && typeof x === 'object')
+      : [];
+
+  if (compareList.length >= 2) {
+    base +=
+      '\n\n## Compare view (side-by-side)\nThe user has these listings open in the Compare view. Use this data for questions about differences, tradeoffs, "which is better", price, beds, schools, crime risk, or choosing between these homes. Refer to them by address or short labels (e.g. first vs second column order as listed).\n' +
+      JSON.stringify(compareList) +
+      '\n\nUse only facts from this JSON. If the Compare view is present, prefer it for compare-or-choose questions over the single selected listing below.';
+  }
 
   if (
     focusedProperty &&
@@ -136,7 +174,7 @@ function buildSystemPrompt(focusedProperty: unknown): string {
     Object.keys(focusedProperty as object).length > 0
   ) {
     base +=
-      '\n\n## Currently selected listing\nThe user has this property selected on the map. When they say "this home", "this listing", "this property", or "it" (about a listing), answer using these facts:\n' +
+      '\n\n## Map-selected listing\nThe user may have this property selected on the map. When they say "this home", "this listing", or "it" (about one listing) and Compare view is not the topic, answer using these facts:\n' +
       JSON.stringify(focusedProperty) +
       '\n\nUse only information present here. If something is not included, say you do not have that detail in the listing data.';
   }
@@ -149,7 +187,7 @@ const SEARCH_LISTINGS_TOOL = {
   function: {
     name: 'search_listings',
     description:
-      'Search property listings in the database by optional text keywords (address, city, zip, description, home type) and numeric filters. Use when the user wants to find or compare homes.',
+      'Search property listings in the database by optional text keywords (address, city, zip, description, home type), numeric filters, and optional max_crime_risk_tier (listing crimeRiskLevel is stored per home). Use when the user wants to find or compare homes, including low-crime or safety preferences.',
     parameters: {
       type: 'object',
       properties: {
@@ -166,6 +204,12 @@ const SEARCH_LISTINGS_TOOL = {
           description:
             'Max rows in the text preview for the assistant (default 8, max 15). The app still shows all matches up to 2000 homes in the list.',
         },
+        max_crime_risk_tier: {
+          type: 'string',
+          enum: ['low', 'medium', 'high'],
+          description:
+            'Optional. Filters by each listing\'s crimeRiskLevel (low/medium/high), precomputed in the database. Use low when the user wants the lowest reported crime tier only; medium to include low and medium; omit or use high for no crime-tier filter.',
+        },
       },
     },
   },
@@ -180,7 +224,11 @@ chatRouter.post('/chat', async (req, res) => {
     return;
   }
 
-  const { messages: raw, focusedProperty } = req.body as { messages?: unknown; focusedProperty?: unknown };
+  const { messages: raw, focusedProperty, compareProperties } = req.body as {
+    messages?: unknown;
+    focusedProperty?: unknown;
+    compareProperties?: unknown;
+  };
   if (!Array.isArray(raw)) {
     res.status(400).json({ error: 'Request body must include messages: array' });
     return;
@@ -201,7 +249,7 @@ chatRouter.post('/chat', async (req, res) => {
     return;
   }
 
-  const systemContent = buildSystemPrompt(focusedProperty ?? null);
+  const systemContent = buildSystemPrompt(focusedProperty ?? null, compareProperties ?? null);
 
   const recent = parsed.slice(-MAX_MESSAGES);
   let total = systemContent.length;

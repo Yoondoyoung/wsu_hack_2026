@@ -5,6 +5,7 @@ import type { Property } from '../types/property';
 export function useChat(
   focusedProperty: Property | null,
   onChatListingResult?: (listingIds: string[] | undefined) => void,
+  compareProperties?: Property[] | null,
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,7 @@ export function useChat(
 
     try {
       const history = [...messages, userMsg];
-      const reply = await postChat(history, { focusedProperty });
+      const reply = await postChat(history, { focusedProperty, compareProperties });
       setMessages((prev) => [...prev, { role: 'assistant', content: reply.message }]);
       onChatListingResult?.(reply.listingIds);
     } catch (e) {
@@ -31,7 +32,7 @@ export function useChat(
     } finally {
       setLoading(false);
     }
-  }, [messages, loading, focusedProperty, onChatListingResult]);
+  }, [messages, loading, focusedProperty, compareProperties, onChatListingResult]);
 
   const clear = useCallback(() => {
     setMessages([]);

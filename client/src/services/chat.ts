@@ -65,11 +65,18 @@ export function serializePropertyForChat(p: Property): Record<string, unknown> {
 
 export async function postChat(
   messages: ChatMessage[],
-  options?: { focusedProperty?: Property | null },
+  options?: { focusedProperty?: Property | null; compareProperties?: Property[] | null },
 ): Promise<ChatPostResult> {
-  const body: { messages: ChatMessage[]; focusedProperty?: Record<string, unknown> } = { messages };
+  const body: {
+    messages: ChatMessage[];
+    focusedProperty?: Record<string, unknown>;
+    compareProperties?: Record<string, unknown>[];
+  } = { messages };
   if (options?.focusedProperty) {
     body.focusedProperty = serializePropertyForChat(options.focusedProperty);
+  }
+  if (options?.compareProperties && options.compareProperties.length >= 2) {
+    body.compareProperties = options.compareProperties.map((p) => serializePropertyForChat(p));
   }
   const res = await fetch('/api/chat', {
     method: 'POST',

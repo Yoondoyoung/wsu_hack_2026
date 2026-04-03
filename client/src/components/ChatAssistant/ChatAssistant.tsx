@@ -3,10 +3,11 @@ import { MessageCircle, X, Send, Loader2, Trash2 } from 'lucide-react';
 import { useChat } from '../../hooks/useChat';
 import { colors, glass } from '../../design';
 import type { Property } from '../../types/property';
-import type { ChatFilterPatch } from '../../services/chat';
+import type { ChatFilterPatch, FocusedAnalysisContext } from '../../services/chat';
 
 interface Props {
   focusedProperty?: Property | null;
+  focusedAnalysis?: FocusedAnalysisContext | null;
   mode: 'browse' | 'guided';
   onboardingMode: 'pending' | 'browse' | 'guided';
   onChooseBrowse: () => void;
@@ -19,6 +20,7 @@ interface Props {
 
 export function ChatAssistant({
   focusedProperty = null,
+  focusedAnalysis = null,
   mode,
   onboardingMode,
   onChooseBrowse,
@@ -46,6 +48,7 @@ export function ChatAssistant({
     appendAssistantMessage,
   } = useChat(
     focusedProperty,
+    focusedAnalysis,
     mode,
     onChatListingResult,
     (patch, unsupported) => {

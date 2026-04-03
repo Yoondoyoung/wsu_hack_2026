@@ -12,7 +12,11 @@ import { useProperties } from './hooks/useProperties';
 import { glass, colors } from './design';
 import { calcTCO, TCO_DEFAULTS, type TcoInputs } from './utils/tcoCalculator';
 import type { Property } from './types/property';
-import type { ChatFilterPatch } from './services/chat';
+import type {
+  ChatFilterPatch,
+  FocusedAnalysisContext,
+  FocusedMortgagePredictorContext,
+} from './services/chat';
 
 const SNAP_THRESHOLD = 120;        // px — float-card to float-card
 const COMPARE_H_APPROX = 460;      // px — estimated compare view height for proximity detection
@@ -59,6 +63,8 @@ export default function App() {
   const [schoolAgeGroups, setSchoolAgeGroups] = useState<SchoolAgeFilter[]>([]);
   const [schoolRadiusMiles, setSchoolRadiusMiles] = useState(0);
   const [groceryRadiusMiles, setGroceryRadiusMiles] = useState(0);
+  const [mortgageContextByPropertyId, setMortgageContextByPropertyId] =
+    useState<Record<string, FocusedMortgagePredictorContext | undefined>>({});
   /** When set, map + list show only these IDs (from chat search_listings). `null` = use slider filters. */
   const [chatListingIds, setChatListingIds] = useState<string[] | null>(null);
   const [guidedFiltersReady, setGuidedFiltersReady] = useState(false);
@@ -415,6 +421,34 @@ export default function App() {
     return list.length >= 2 ? list : null;
   }, [compareIds, properties]);
 
+  const chatFocusedAnalysis = useMemo((): FocusedAnalysisContext | null => {
+    if (!chatFocusedProperty) return null;
+    const tco = calcTCO(chatFocusedProperty, tcoInputs);
+    return {
+      propertyId: chatFocusedProperty.id,
+      tco: {
+        inputs: tcoInputs,
+        principalInterest: tco.principalInterest,
+        propertyTax: tco.propertyTax,
+        insurance: tco.insurance,
+        maintenance: tco.maintenance,
+        hoa: tco.hoa,
+        pmi: tco.pmi,
+        grossMonthly: tco.grossMonthly,
+        rentalIncome: tco.rentalIncome,
+        netMonthly: tco.netMonthly,
+      },
+      mortgagePredictor: mortgageContextByPropertyId[chatFocusedProperty.id],
+    };
+  }, [chatFocusedProperty, tcoInputs, mortgageContextByPropertyId]);
+
+  const handleMortgageContextChange = useCallback(
+    (propertyId: string, next: FocusedMortgagePredictorContext) => {
+      setMortgageContextByPropertyId((prev) => ({ ...prev, [propertyId]: next }));
+    },
+    [],
+  );
+
   return (
     <DashboardLayout>
       {/* Map — full bleed behind panels */}
@@ -522,6 +556,8 @@ export default function App() {
           floatingCardIds={floatingCardIds}
           chatListViewActive={chatListingIds !== null}
           onClearChatListView={() => setChatListingIds(null)}
+          mortgageContextByPropertyId={mortgageContextByPropertyId}
+          onMortgageContextChange={handleMortgageContextChange}
         />
       </div>
 
@@ -566,6 +602,7 @@ export default function App() {
 
       <ChatAssistant
         focusedProperty={chatFocusedProperty}
+        focusedAnalysis={chatFocusedAnalysis}
         mode={onboardingMode === 'guided' ? 'guided' : 'browse'}
         onboardingMode={onboardingMode}
         onChooseBrowse={handleChooseBrowse}

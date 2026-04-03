@@ -6,6 +6,7 @@ import {
   ShieldAlert, DollarSign, TrendingDown, GripVertical,
 } from 'lucide-react';
 import type { Property } from '../../types/property';
+import type { FocusedMortgagePredictorContext } from '../../services/chat';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
 import { noiseExposureColor, noiseExposureLabel } from '../../utils/noiseExposure';
@@ -41,6 +42,8 @@ interface Props {
   /** When true, list/map are scoped to chat search results */
   chatListViewActive?: boolean;
   onClearChatListView?: () => void;
+  mortgageContextByPropertyId?: Record<string, FocusedMortgagePredictorContext | undefined>;
+  onMortgageContextChange?: (propertyId: string, next: FocusedMortgagePredictorContext) => void;
 }
 
 /* ─── Badge ────────────────────────────────────────────────── */
@@ -511,6 +514,8 @@ export function RightPanel({
   floatingCardIds,
   chatListViewActive,
   onClearChatListView,
+  mortgageContextByPropertyId,
+  onMortgageContextChange,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLDivElement>(null);
@@ -662,6 +667,8 @@ export function RightPanel({
           onClose={() => setDetailProperty(null)}
           tcoInputs={tcoInputs}
           onTcoInputsChange={onTcoInputsChange}
+          initialMortgageContext={mortgageContextByPropertyId?.[detailProperty.id] ?? null}
+          onMortgageContextChange={onMortgageContextChange}
           onShowRoute={onShowRoute}
         />
       )}

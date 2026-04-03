@@ -1,9 +1,15 @@
 import { useState, useCallback } from 'react';
-import { postChat, type ChatMessage, type ChatFilterPatch } from '../services/chat';
+import {
+  postChat,
+  type ChatMessage,
+  type ChatFilterPatch,
+  type FocusedAnalysisContext,
+} from '../services/chat';
 import type { Property } from '../types/property';
 
 export function useChat(
   focusedProperty: Property | null,
+  focusedAnalysis: FocusedAnalysisContext | null,
   mode: 'browse' | 'guided',
   onChatListingResult?: (listingIds: string[] | undefined) => void,
   onFilterPatch?: (patch: ChatFilterPatch | undefined, unsupported: string[] | undefined) => void,
@@ -24,7 +30,7 @@ export function useChat(
 
     try {
       const history = [...messages, userMsg];
-      const reply = await postChat(history, { focusedProperty, mode, compareProperties });
+      const reply = await postChat(history, { focusedProperty, focusedAnalysis, mode, compareProperties });
       setMessages((prev) => [...prev, { role: 'assistant', content: reply.message }]);
       onChatListingResult?.(reply.listingIds);
       onFilterPatch?.(reply.filterPatch, reply.unsupportedConstraints);
@@ -35,7 +41,7 @@ export function useChat(
     } finally {
       setLoading(false);
     }
-  }, [messages, loading, focusedProperty, mode, compareProperties, onChatListingResult, onFilterPatch]);
+  }, [messages, loading, focusedProperty, focusedAnalysis, mode, compareProperties, onChatListingResult, onFilterPatch]);
 
   const appendAssistantMessage = useCallback((content: string) => {
     const trimmed = content.trim();

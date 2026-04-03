@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, type ElementType, type ReactNode } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef, type ElementType, type ReactNode } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Bed, Bath, Square, Flame, Snowflake, Car, Wrench, Building,
   GraduationCap, User, Phone, Clock, Eye, Heart, TrendingUp, ExternalLink, ShieldAlert, Volume2,
@@ -8,6 +8,11 @@ import { useNearbyGrocery } from '../../hooks/useNearbyGrocery';
 import { useMortgagePredictor, type ScenarioResult } from '../../hooks/useMortgagePredictor';
 import type { MortgageRequestPayload } from '../../types/mortgage';
 import type { Property } from '../../types/property';
+import type {
+  FocusedMortgagePredictorContext,
+  MortgagePredictorFormState,
+  MortgageScenarioSnapshot,
+} from '../../services/chat';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
 import { noiseExposureColor, noiseExposureLabel } from '../../utils/noiseExposure';
@@ -19,6 +24,8 @@ interface Props {
   onClose: () => void;
   tcoInputs: TcoInputs;
   onTcoInputsChange: (next: TcoInputs) => void;
+  initialMortgageContext?: FocusedMortgagePredictorContext | null;
+  onMortgageContextChange?: (propertyId: string, next: FocusedMortgagePredictorContext) => void;
   onShowRoute?: (
     from: [number, number],
     to: [number, number],
@@ -359,17 +366,63 @@ function ImprovementTips({ scenarios, baseConfidence }: { scenarios: ScenarioRes
   );
 }
 
-function MortgagePredictorPanel({ property }: { property: Property }) {
-  const [fields, setFields] = useState(FIELD_DEFAULTS);
+function MortgagePredictorPanel({
+  property,
+  initialContext,
+  onContextChange,
+}: {
+  property: Property;
+  initialContext?: FocusedMortgagePredictorContext | null;
+  onContextChange?: (propertyId: string, next: FocusedMortgagePredictorContext) => void;
+}) {
+  const [fields, setFields] = useState<MortgagePredictorFormState>(() => {
+    if (initialContext?.inputs) return initialContext.inputs;
+    return {
+      annualIncome: FIELD_DEFAULTS.annualIncome,
+      totalDebt: FIELD_DEFAULTS.totalDebt,
+      loanAmount: FIELD_DEFAULTS.loanAmount,
+      downPayment: FIELD_DEFAULTS.downPayment,
+    };
+  });
+  const [lastPayload, setLastPayload] = useState<MortgageRequestPayload | undefined>(
+    initialContext?.lastPayload,
+  );
   const { result, scenarios, loading, error, predict } = useMortgagePredictor();
+  const seededPropertyIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setFields((prev) => ({
-      ...prev,
+    if (seededPropertyIdRef.current === property.id) return;
+    seededPropertyIdRef.current = property.id;
+
+    if (initialContext?.inputs) {
+      setFields(initialContext.inputs);
+      setLastPayload(initialContext.lastPayload);
+      return;
+    }
+    setFields({
+      annualIncome: FIELD_DEFAULTS.annualIncome,
+      totalDebt: FIELD_DEFAULTS.totalDebt,
       loanAmount: Math.round(property.price * 0.8),
       downPayment: Math.round(property.price * 0.2),
+    });
+    setLastPayload(undefined);
+  }, [property.id, property.price, initialContext]);
+
+  useEffect(() => {
+    if (!onContextChange) return;
+    const topScenarios: MortgageScenarioSnapshot[] = scenarios.slice(0, 2).map((s) => ({
+      label: s.scenario.label,
+      delta: s.delta,
+      confidence: s.response.confidence,
     }));
-  }, [property.id, property.price]);
+    onContextChange(property.id, {
+      inputs: fields,
+      lastPayload,
+      lastResult: result ?? undefined,
+      topScenarios,
+      error,
+    });
+  }, [property.id, fields, lastPayload, result, scenarios, error, onContextChange]);
 
   const set = (key: keyof typeof FIELD_DEFAULTS) => (v: number) => {
     if (key === 'downPayment' && property.price > 0) {
@@ -405,7 +458,9 @@ function MortgagePredictorPanel({ property }: { property: Property }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          predict(computePayload(fields, property));
+          const payload = computePayload(fields, property);
+          setLastPayload(payload);
+          predict(payload);
         }}
         className="space-y-2"
       >
@@ -523,7 +578,15 @@ function NearbyGroceryPanel({
   );
 }
 
-export function PropertyDetail({ property, onClose, tcoInputs, onTcoInputsChange, onShowRoute }: Props) {
+export function PropertyDetail({
+  property,
+  onClose,
+  tcoInputs,
+  onTcoInputsChange,
+  initialMortgageContext,
+  onMortgageContextChange,
+  onShowRoute,
+}: Props) {
   const [photoIdx, setPhotoIdx] = useState(0);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
@@ -767,7 +830,11 @@ export function PropertyDetail({ property, onClose, tcoInputs, onTcoInputsChange
                 inputs={tcoInputs}
                 onInputsChange={onTcoInputsChange}
               />
-              <MortgagePredictorPanel property={property} />
+              <MortgagePredictorPanel
+                property={property}
+                initialContext={initialMortgageContext}
+                onContextChange={onMortgageContextChange}
+              />
             </div>
           </div>
         </div>

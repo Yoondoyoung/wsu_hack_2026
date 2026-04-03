@@ -272,7 +272,12 @@ function normalizeFilterPatch(args: SetFiltersArgs): { patch: SetFiltersArgs; un
   return { patch, unsupported };
 }
 
-function buildSystemPrompt(focusedProperty: unknown, mode: ChatMode, compareProperties: unknown): string {
+function buildSystemPrompt(
+  focusedProperty: unknown,
+  mode: ChatMode,
+  compareProperties: unknown,
+  focusedAnalysis: unknown,
+): string {
   let base =
     CHAT_SYSTEM_PROMPT +
     '\n\nYou can call the search_listings tool to find real homes from the app’s Salt Lake area listing database. Each listing includes a precomputed crimeRiskLevel (low/medium/high) and noiseExposureLevel (low/medium/high). Use max_crime_risk_tier: low when the user wants the lowest crime tier only; medium to allow low and medium. Use max_noise_exposure_tier: low when the user wants quieter homes; medium to allow low and medium noise tiers. When the user asks for safe areas, low crime, quiet neighborhoods, or less noise, call search_listings with these tier parameters rather than giving only generic neighborhood advice. When the user asks for homes matching price, beds, or location keywords, use the tool. Describe only listings returned by the tool; do not invent addresses or prices.' +
@@ -305,6 +310,18 @@ function buildSystemPrompt(focusedProperty: unknown, mode: ChatMode, compareProp
       '\n\n## Map-selected listing\nThe user may have this property selected on the map. When they say "this home", "this listing", or "it" (about one listing) and Compare view is not the topic, answer using these facts:\n' +
       JSON.stringify(focusedProperty) +
       '\n\nUse only information present here. If something is not included, say you do not have that detail in the listing data.';
+  }
+
+  if (
+    focusedAnalysis &&
+    typeof focusedAnalysis === 'object' &&
+    !Array.isArray(focusedAnalysis) &&
+    Object.keys(focusedAnalysis as object).length > 0
+  ) {
+    base +=
+      '\n\n## Selected listing computed analysis\nWhen the user asks about true monthly cost, total monthly, net monthly, payment breakdown, or AI mortgage prediction, use this computed context first:\n' +
+      JSON.stringify(focusedAnalysis) +
+      '\n\nRules: (1) These values are snapshot estimates and may differ from lender quotes. (2) If mortgagePredictor.lastResult is missing, say prediction has not been run yet. (3) If the user asks about exact values, report these numbers directly and keep them consistent in the answer.';
   }
 
   return base;
@@ -389,11 +406,12 @@ chatRouter.post('/chat', async (req, res) => {
     return;
   }
 
-  const { messages: raw, focusedProperty, mode: rawMode, compareProperties } = req.body as {
+  const { messages: raw, focusedProperty, mode: rawMode, compareProperties, focusedAnalysis } = req.body as {
     messages?: unknown;
     focusedProperty?: unknown;
     mode?: unknown;
     compareProperties?: unknown;
+    focusedAnalysis?: unknown;
   };
   if (!Array.isArray(raw)) {
     res.status(400).json({ error: 'Request body must include messages: array' });
@@ -417,7 +435,12 @@ chatRouter.post('/chat', async (req, res) => {
 
   const mode: ChatMode = rawMode === 'guided' ? 'guided' : 'browse';
   const latestUserText = [...parsed].reverse().find((m) => m.role === 'user')?.content ?? '';
-  const systemContent = buildSystemPrompt(focusedProperty ?? null, mode, compareProperties ?? null);
+  const systemContent = buildSystemPrompt(
+    focusedProperty ?? null,
+    mode,
+    compareProperties ?? null,
+    focusedAnalysis ?? null,
+  );
 
   const recent = parsed.slice(-MAX_MESSAGES);
   let total = systemContent.length;

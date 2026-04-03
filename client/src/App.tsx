@@ -24,6 +24,7 @@ const DEFAULT_SCHOOL_RADIUS_MILES = 1;
 export type MapPriceMode = 'listing' | 'netMonthly';
 type OnboardingMode = 'pending' | 'browse' | 'guided';
 type CrimeRiskFilter = 'any' | 'low' | 'medium' | 'high';
+type NoiseRiskFilter = 'any' | 'low' | 'medium' | 'high';
 type SchoolAgeFilter = 'elementary' | 'middle' | 'high';
 
 function clamp(n: number, min: number, max: number): number {
@@ -54,6 +55,7 @@ export default function App() {
   const [minBeds, setMinBeds] = useState(0);
   const [minBaths, setMinBaths] = useState(0);
   const [crimeRisk, setCrimeRisk] = useState<CrimeRiskFilter>('any');
+  const [noiseRisk, setNoiseRisk] = useState<NoiseRiskFilter>('any');
   const [schoolAgeGroups, setSchoolAgeGroups] = useState<SchoolAgeFilter[]>([]);
   const [schoolRadiusMiles, setSchoolRadiusMiles] = useState(0);
   const [groceryRadiusMiles, setGroceryRadiusMiles] = useState(0);
@@ -98,6 +100,7 @@ export default function App() {
     setMinBeds(0);
     setMinBaths(0);
     setCrimeRisk('any');
+    setNoiseRisk('any');
     setSchoolAgeGroups([]);
     setSchoolRadiusMiles(0);
     setGroceryRadiusMiles(0);
@@ -120,6 +123,7 @@ export default function App() {
     if (p.beds < minBeds) return false;
     if (p.baths < minBaths) return false;
     if (crimeRisk !== 'any' && p.crimeRiskLevel !== crimeRisk) return false;
+    if (noiseRisk !== 'any' && p.noiseExposureLevel !== noiseRisk) return false;
     if (schoolAgeGroups.length > 0) {
       const schoolWithinRadius = p.schools.some((s) => {
         const dist = Number(s.distance);
@@ -137,12 +141,14 @@ export default function App() {
 
   const visibleProperties = useMemo(() => {
     if (onboardingMode === 'pending') return [];
+    if (chatListingIds !== null) {
+      const byId = new Map(properties.map((p) => [p.id, p] as const));
+      return chatListingIds
+        .map((id) => byId.get(id))
+        .filter((p): p is Property => p != null);
+    }
     if (onboardingMode === 'guided' && !guidedFiltersReady) return [];
-    if (chatListingIds === null) return filteredProperties;
-    const byId = new Map(properties.map((p) => [p.id, p] as const));
-    return chatListingIds
-      .map((id) => byId.get(id))
-      .filter((p): p is Property => p != null);
+    return filteredProperties;
   }, [onboardingMode, guidedFiltersReady, chatListingIds, properties, filteredProperties]);
 
   useEffect(() => {
@@ -162,8 +168,11 @@ export default function App() {
   }, [selectedId, schoolAgeGroups, schoolRadiusMiles, groceryRadiusMiles, visibleProperties]);
 
   const handleChatListingResult = useCallback((listingIds: string[] | undefined) => {
-    if (listingIds !== undefined) setChatListingIds(listingIds);
-  }, []);
+    if (listingIds !== undefined) {
+      setChatListingIds(listingIds);
+      if (onboardingMode === 'guided') setGuidedFiltersReady(true);
+    }
+  }, [onboardingMode]);
 
   const handleFilterPatch = useCallback((patch: ChatFilterPatch | undefined) => {
     if (!patch) return;
@@ -176,6 +185,9 @@ export default function App() {
     if (typeof patch.min_baths === 'number') setMinBaths(clamp(Math.round(patch.min_baths), 0, 10));
     if (patch.crime_risk && ['any', 'low', 'medium', 'high'].includes(patch.crime_risk)) {
       setCrimeRisk(patch.crime_risk);
+    }
+    if (patch.noise_risk && ['any', 'low', 'medium', 'high'].includes(patch.noise_risk)) {
+      setNoiseRisk(patch.noise_risk);
     }
     if (Array.isArray(patch.school_age_groups)) {
       const validGroups = patch.school_age_groups
@@ -480,6 +492,8 @@ export default function App() {
           onMinBathsChange={setMinBaths}
           crimeRisk={crimeRisk}
           onCrimeRiskChange={setCrimeRisk}
+          noiseRisk={noiseRisk}
+          onNoiseRiskChange={setNoiseRisk}
           schoolAgeGroups={schoolAgeGroups}
           onSchoolAgeGroupsChange={setSchoolAgeGroups}
           schoolRadiusMiles={schoolRadiusMiles}

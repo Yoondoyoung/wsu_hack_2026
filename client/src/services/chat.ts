@@ -23,6 +23,7 @@ export interface ChatPostResult {
 }
 
 export type CrimeRiskFilter = 'any' | 'low' | 'medium' | 'high';
+export type NoiseRiskFilter = 'any' | 'low' | 'medium' | 'high';
 export type SchoolAgeFilter = 'elementary' | 'middle' | 'high';
 
 export interface ChatFilterPatch {
@@ -31,6 +32,7 @@ export interface ChatFilterPatch {
   min_beds?: number;
   min_baths?: number;
   crime_risk?: CrimeRiskFilter;
+  noise_risk?: NoiseRiskFilter;
   school_age_groups?: SchoolAgeFilter[];
   school_radius_miles?: number;
   grocery_radius_miles?: number;

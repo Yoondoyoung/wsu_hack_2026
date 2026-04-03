@@ -35,9 +35,15 @@ interface SearchListingsArgs {
    * low = only low; medium = low+medium; high = no extra crime filter.
    */
   max_crime_risk_tier?: 'low' | 'medium' | 'high';
+  /**
+   * Worst acceptable road-noise tier (from listing payload `noiseExposureLevel`).
+   * low = only low; medium = low+medium; high = no extra noise filter.
+   */
+  max_noise_exposure_tier?: 'low' | 'medium' | 'high';
 }
 
 const CRIME_TIER_ORDER: Record<string, number> = { low: 0, medium: 1, high: 2 };
+const NOISE_TIER_ORDER: Record<string, number> = { low: 0, medium: 1, high: 2 };
 
 function crimeRiskTierOrder(row: GenericRow): number | null {
   const raw = str(row, 'crimeRiskLevel').toLowerCase();
@@ -51,8 +57,21 @@ function matchesMaxCrimeRiskTier(row: GenericRow, maxTier: 'low' | 'medium' | 'h
   return propOrder <= CRIME_TIER_ORDER[maxTier]!;
 }
 
+function noiseExposureTierOrder(row: GenericRow): number | null {
+  const raw = str(row, 'noiseExposureLevel').toLowerCase();
+  if (raw in NOISE_TIER_ORDER) return NOISE_TIER_ORDER[raw]!;
+  return null;
+}
+
+function matchesMaxNoiseExposureTier(row: GenericRow, maxTier: 'low' | 'medium' | 'high'): boolean {
+  const propOrder = noiseExposureTierOrder(row);
+  if (propOrder === null) return false;
+  return propOrder <= NOISE_TIER_ORDER[maxTier]!;
+}
+
 type ChatMode = 'browse' | 'guided';
 type CrimeRiskFilter = 'any' | 'low' | 'medium' | 'high';
+type NoiseRiskFilter = 'any' | 'low' | 'medium' | 'high';
 type SchoolAgeFilter = 'elementary' | 'middle' | 'high';
 
 interface SetFiltersArgs {
@@ -61,6 +80,7 @@ interface SetFiltersArgs {
   min_beds?: number;
   min_baths?: number;
   crime_risk?: CrimeRiskFilter;
+  noise_risk?: NoiseRiskFilter;
   school_age_groups?: SchoolAgeFilter[];
   school_radius_miles?: number;
   grocery_radius_miles?: number;
@@ -102,6 +122,12 @@ function extractGuidedPatchFromText(text: string): SetFiltersArgs | undefined {
     patch.grocery_radius_miles = 1;
   }
 
+  const quietHomeMentioned =
+    /\bquiet\b|\bquieter\b|\bquite\s+(?:place|home|house)\b|\blow noise\b|\bless noise\b|\bpeaceful\b|\bcalm\b|조용한\s*집|조용한|소음\s*적(?:은|고)|소음\s*낮(?:은|고)/.test(lower);
+  if (quietHomeMentioned) {
+    patch.noise_risk = 'low';
+  }
+
   const hasAny = Object.keys(patch).length > 0;
   return hasAny ? patch : undefined;
 }
@@ -140,6 +166,12 @@ function searchListings(rows: GenericRow[], args: SearchListingsArgs): {
       args.max_crime_risk_tier === 'medium'
     ) {
       if (!matchesMaxCrimeRiskTier(row, args.max_crime_risk_tier)) return false;
+    }
+    if (
+      args.max_noise_exposure_tier === 'low' ||
+      args.max_noise_exposure_tier === 'medium'
+    ) {
+      if (!matchesMaxNoiseExposureTier(row, args.max_noise_exposure_tier)) return false;
     }
     return true;
   });
@@ -214,6 +246,7 @@ function normalizeFilterPatch(args: SetFiltersArgs): { patch: SetFiltersArgs; un
   if (typeof args.min_beds === 'number') patch.min_beds = clamp(Math.round(args.min_beds), 0, 10);
   if (typeof args.min_baths === 'number') patch.min_baths = clamp(Math.round(args.min_baths), 0, 10);
   if (args.crime_risk && ['any', 'low', 'medium', 'high'].includes(args.crime_risk)) patch.crime_risk = args.crime_risk;
+  if (args.noise_risk && ['any', 'low', 'medium', 'high'].includes(args.noise_risk)) patch.noise_risk = args.noise_risk;
   if (Array.isArray(args.school_age_groups)) {
     const valid = args.school_age_groups.filter((group): group is SchoolAgeFilter =>
       ['elementary', 'middle', 'high'].includes(group),
@@ -242,12 +275,12 @@ function normalizeFilterPatch(args: SetFiltersArgs): { patch: SetFiltersArgs; un
 function buildSystemPrompt(focusedProperty: unknown, mode: ChatMode, compareProperties: unknown): string {
   let base =
     CHAT_SYSTEM_PROMPT +
-    '\n\nYou can call the search_listings tool to find real homes from the app’s Salt Lake area listing database. Each listing includes a precomputed crimeRiskLevel (low/medium/high) from regional incident data—use parameter max_crime_risk_tier: low when the user wants the lowest tier only; medium to allow low and medium. When the user asks for safe areas or low crime, call search_listings with max_crime_risk_tier rather than giving only generic neighborhood advice. When the user asks for homes matching price, beds, or location keywords, use the tool. Describe only listings returned by the tool; do not invent addresses or prices.' +
+    '\n\nYou can call the search_listings tool to find real homes from the app’s Salt Lake area listing database. Each listing includes a precomputed crimeRiskLevel (low/medium/high) and noiseExposureLevel (low/medium/high). Use max_crime_risk_tier: low when the user wants the lowest crime tier only; medium to allow low and medium. Use max_noise_exposure_tier: low when the user wants quieter homes; medium to allow low and medium noise tiers. When the user asks for safe areas, low crime, quiet neighborhoods, or less noise, call search_listings with these tier parameters rather than giving only generic neighborhood advice. When the user asks for homes matching price, beds, or location keywords, use the tool. Describe only listings returned by the tool; do not invent addresses or prices.' +
     '\n\nAfter search_listings returns results: the app shows those homes in the right-hand list and on the map (properties_shown_in_app matches what the user sees; use total_matched for how many fit the search). If ids_truncated is true, say the app shows the first N matches of a larger set. Keep your chat reply short (2–4 sentences). Briefly confirm the criteria you used, state roughly how many matches there were (use total_matched from the tool if helpful), and say the matches are shown in the list—do not enumerate addresses, prices, or bed counts in the chat. If there are zero matches, say so in one or two sentences and suggest relaxing filters. Match the user’s language (e.g. Korean if they wrote in Korean).' +
     '\n\nFor mortgage or general questions that do not require search_listings, answer as usual with appropriate detail.';
   if (mode === 'guided') {
     base +=
-      '\n\nWhen the user asks you to narrow homes by constraints, call set_filters with only supported left-panel filters: min_price, max_price, min_beds, min_baths, crime_risk, school_age_groups, school_radius_miles, grocery_radius_miles. school_age_groups must be an array and can include multiple values (elementary, middle, high) for multiple children. IMPORTANT: Do not ask for every filter field. Apply only what the user already provided and leave unspecified filters unchanged. If the user specifies child school age groups but omits school distance, leave school_radius_miles empty and the app will auto-apply a 1-mile default radius. If the user says grocery should be near/close but gives no distance, set grocery_radius_miles to 1. Only ask a follow-up question when the user request is ambiguous or contradictory. If user requested constraints that do not map to those fields, list them in unsupported_constraints and politely explain those cannot be auto-filtered right now.';
+      '\n\nWhen the user asks you to narrow homes by constraints, call set_filters with only supported left-panel filters: min_price, max_price, min_beds, min_baths, crime_risk, noise_risk, school_age_groups, school_radius_miles, grocery_radius_miles. school_age_groups must be an array and can include multiple values (elementary, middle, high) for multiple children. If the user says they want a quiet home, low noise, less traffic noise, or says this in Korean (e.g. "조용한 집"), set noise_risk to low. IMPORTANT: Do not ask for every filter field. Apply only what the user already provided and leave unspecified filters unchanged. If the user specifies child school age groups but omits school distance, leave school_radius_miles empty and the app will auto-apply a 1-mile default radius. If the user says grocery should be near/close but gives no distance, set grocery_radius_miles to 1. Only ask a follow-up question when the user request is ambiguous or contradictory. If user requested constraints that do not map to those fields, list them in unsupported_constraints and politely explain those cannot be auto-filtered right now.';
   }
 
   const compareList =
@@ -282,7 +315,7 @@ const SEARCH_LISTINGS_TOOL = {
   function: {
     name: 'search_listings',
     description:
-      'Search property listings in the database by optional text keywords (address, city, zip, description, home type), numeric filters, and optional max_crime_risk_tier (listing crimeRiskLevel is stored per home). Use when the user wants to find or compare homes, including low-crime or safety preferences.',
+      'Search property listings in the database by optional text keywords (address, city, zip, description, home type), numeric filters, optional max_crime_risk_tier, and optional max_noise_exposure_tier (listing crimeRiskLevel/noiseExposureLevel are stored per home). Use when the user wants to find or compare homes, including low-crime, safety, or quiet-home preferences.',
     parameters: {
       type: 'object',
       properties: {
@@ -305,6 +338,12 @@ const SEARCH_LISTINGS_TOOL = {
           description:
             'Optional. Filters by each listing\'s crimeRiskLevel (low/medium/high), precomputed in the database. Use low when the user wants the lowest reported crime tier only; medium to include low and medium; omit or use high for no crime-tier filter.',
         },
+        max_noise_exposure_tier: {
+          type: 'string',
+          enum: ['low', 'medium', 'high'],
+          description:
+            'Optional. Filters by each listing\'s noiseExposureLevel (low/medium/high). Use low when the user wants quiet homes or low road-noise exposure; medium to include low and medium; omit or use high for no noise-tier filter.',
+        },
       },
     },
   },
@@ -324,6 +363,7 @@ const SET_FILTERS_TOOL = {
         min_beds: { type: 'integer' },
         min_baths: { type: 'integer' },
         crime_risk: { type: 'string', enum: ['any', 'low', 'medium', 'high'] },
+        noise_risk: { type: 'string', enum: ['any', 'low', 'medium', 'high'] },
         school_age_groups: {
           type: 'array',
           items: { type: 'string', enum: ['elementary', 'middle', 'high'] },

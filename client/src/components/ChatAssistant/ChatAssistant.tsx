@@ -157,7 +157,7 @@ export function ChatAssistant({
                     type="button"
                     onClick={() => {
                       onChooseGuided();
-                      appendAssistantMessage('Great. Tell me your budget, beds, baths, crime risk, school age groups (multi-select), school distance, and grocery distance, and I will apply them to the left filters.');
+                      appendAssistantMessage('Great. Tell me your budget, beds, baths, crime risk, noise level, school age groups (multi-select), school distance, and grocery distance, and I will apply them to the left filters.');
                     }}
                     className="px-2.5 py-1 rounded-lg text-[11px] border"
                     style={{ borderColor: `${colors.emerald}66`, color: '#6ee7b7', background: 'rgba(16,185,129,0.14)' }}
@@ -172,7 +172,7 @@ export function ChatAssistant({
                 {compareProperties && compareProperties.length >= 2
                   ? 'Ask about these homes side by side (price, schools, crime risk, tradeoffs), search listings, or mortgages. What would you like to know?'
                   : mode === 'guided'
-                  ? 'Share your conditions and I will auto-adjust the left filters. Example: under $700k, 3+ beds, low crime, elementary + middle school within 1 mile.'
+                  ? 'Share your conditions and I will auto-adjust the left filters. Example: under $700k, 3+ beds, low crime, low noise, elementary + middle school within 1 mile.'
                   : 'Ask about this listing when one is selected, search homes (e.g. “3 bed under $500k near 84106”), or mortgages and buying. What would you like to know?'}
               </p>
             )}

@@ -37,6 +37,8 @@ interface Props {
   onMinBathsChange: (baths: number) => void;
   crimeRisk: 'any' | 'low' | 'medium' | 'high';
   onCrimeRiskChange: (risk: 'any' | 'low' | 'medium' | 'high') => void;
+  noiseRisk: 'any' | 'low' | 'medium' | 'high';
+  onNoiseRiskChange: (risk: 'any' | 'low' | 'medium' | 'high') => void;
   schoolAgeGroups: Array<'elementary' | 'middle' | 'high'>;
   onSchoolAgeGroupsChange: (groups: Array<'elementary' | 'middle' | 'high'>) => void;
   schoolRadiusMiles: number;
@@ -138,6 +140,8 @@ export function LeftPanel({
   onMinBathsChange,
   crimeRisk,
   onCrimeRiskChange,
+  noiseRisk,
+  onNoiseRiskChange,
   schoolAgeGroups,
   onSchoolAgeGroupsChange,
   schoolRadiusMiles,
@@ -524,6 +528,30 @@ export function LeftPanel({
                         className="py-1 rounded text-[10px] font-medium transition-all border capitalize"
                         style={crimeRisk === risk
                           ? { background: `${colors.red}22`, borderColor: `${colors.red}55`, color: '#fca5a5' }
+                          : { background: colors.whiteSoft, borderColor: colors.border, color: colors.whiteSubtle }}
+                      >
+                        {risk}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-0.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Volume2 size={11} style={{ color: colors.whiteSubtle }} />
+                      <span className="text-[11px]" style={{ color: colors.whiteMuted }}>Noise Level</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {(['any', 'low', 'medium', 'high'] as const).map((risk) => (
+                      <button
+                        key={risk}
+                        type="button"
+                        onClick={() => onNoiseRiskChange(risk)}
+                        className="py-1 rounded text-[10px] font-medium transition-all border capitalize"
+                        style={noiseRisk === risk
+                          ? { background: `${colors.yellow}22`, borderColor: `${colors.yellow}66`, color: '#fcd34d' }
                           : { background: colors.whiteSoft, borderColor: colors.border, color: colors.whiteSubtle }}
                       >
                         {risk}

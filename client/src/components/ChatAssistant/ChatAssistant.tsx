@@ -27,9 +27,16 @@ export function ChatAssistant({
   onChatListingResult,
   onFilterPatch,
 }: Props) {
+  const BUTTON_SIZE = 48;
+  const PANEL_GAP = 12;
+  const EDGE_PADDING = 8;
+  const DEFAULT_RIGHT_OFFSET = 360 + 24;
+  const DEFAULT_BOTTOM_OFFSET = 24;
+
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [unsupportedNotes, setUnsupportedNotes] = useState<string[] | null>(null);
+  const [floatingPos, setFloatingPos] = useState<{ x: number; y: number } | null>(null);
   const {
     messages,
     loading,
@@ -48,6 +55,8 @@ export function ChatAssistant({
     compareProperties,
   );
   const listRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ lastX: number; lastY: number } | null>(null);
+  const dragMovedRef = useRef(false);
 
   useEffect(() => {
     if (onboardingMode === 'pending') setOpen(true);
@@ -72,18 +81,105 @@ export function ChatAssistant({
     await sendUserMessage(t);
   }
 
-  /** Sit above map, to the left of the 360px listings panel + gutter */
-  const mapRightOffset = 'calc(360px + 1.5rem)';
+  function panelWidth() {
+    return Math.min(380, Math.max(260, window.innerWidth - 360 - 48));
+  }
+
+  function panelHeight() {
+    return Math.min(480, window.innerHeight * 0.7);
+  }
+
+  function defaultButtonPos() {
+    return {
+      x: window.innerWidth - DEFAULT_RIGHT_OFFSET - BUTTON_SIZE,
+      y: window.innerHeight - DEFAULT_BOTTOM_OFFSET - BUTTON_SIZE,
+    };
+  }
+
+  function clampButtonPos(pos: { x: number; y: number }, isOpen: boolean) {
+    let nextX = pos.x;
+    let nextY = pos.y;
+
+    const maxX = window.innerWidth - EDGE_PADDING - BUTTON_SIZE;
+    const maxY = window.innerHeight - EDGE_PADDING - BUTTON_SIZE;
+    nextX = Math.min(maxX, Math.max(EDGE_PADDING, nextX));
+    nextY = Math.min(maxY, Math.max(EDGE_PADDING, nextY));
+
+    if (isOpen) {
+      const w = panelWidth();
+      const h = panelHeight();
+      const panelLeft = nextX + BUTTON_SIZE - w;
+      const panelTop = nextY - (h + PANEL_GAP);
+      if (panelLeft < EDGE_PADDING) nextX = EDGE_PADDING + w - BUTTON_SIZE;
+      if (panelTop < EDGE_PADDING) nextY = EDGE_PADDING + h + PANEL_GAP;
+      nextX = Math.min(maxX, Math.max(EDGE_PADDING, nextX));
+      nextY = Math.min(maxY, Math.max(EDGE_PADDING, nextY));
+    }
+
+    return { x: nextX, y: nextY };
+  }
+
+  function startDrag(e: React.MouseEvent) {
+    dragRef.current = { lastX: e.clientX, lastY: e.clientY };
+    dragMovedRef.current = false;
+    document.body.style.userSelect = 'none';
+  }
+
+  function handleToggleChat() {
+    if (dragMovedRef.current) {
+      dragMovedRef.current = false;
+      return;
+    }
+    setOpen((v) => !v);
+  }
+
   const onboardingPending = onboardingMode === 'pending';
+  const buttonPos = floatingPos;
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!dragRef.current) return;
+      const dx = e.clientX - dragRef.current.lastX;
+      const dy = e.clientY - dragRef.current.lastY;
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) dragMovedRef.current = true;
+      dragRef.current = { lastX: e.clientX, lastY: e.clientY };
+      setFloatingPos((prev) => {
+        const base = prev ?? defaultButtonPos();
+        return clampButtonPos({ x: base.x + dx, y: base.y + dy }, open);
+      });
+    }
+
+    function onMouseUp() {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      document.body.style.userSelect = '';
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      document.body.style.userSelect = '';
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!buttonPos) return;
+    const onResize = () => setFloatingPos((prev) => (prev ? clampButtonPos(prev, open) : prev));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [buttonPos, open]);
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="absolute z-[35] bottom-6 flex items-center justify-center w-12 h-12 rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95"
+        onMouseDown={startDrag}
+        onClick={handleToggleChat}
+        className="absolute z-[35] flex items-center justify-center w-12 h-12 rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95"
         style={{
-          right: mapRightOffset,
+          ...(buttonPos ? { left: buttonPos.x, top: buttonPos.y } : { right: 'calc(360px + 1.5rem)', bottom: '1.5rem' }),
           background: `linear-gradient(135deg, ${colors.cyan}30, #6366f150)`,
           border: `1px solid ${colors.cyan}50`,
           boxShadow: `0 4px 20px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06)`,
@@ -95,9 +191,11 @@ export function ChatAssistant({
 
       {open && (
         <div
-          className="absolute z-[35] bottom-24 flex flex-col overflow-hidden rounded-2xl shadow-2xl"
+          className="absolute z-[35] flex flex-col overflow-hidden rounded-2xl shadow-2xl"
           style={{
-            right: mapRightOffset,
+            ...(buttonPos
+              ? { left: buttonPos.x + BUTTON_SIZE - panelWidth(), bottom: window.innerHeight - buttonPos.y + PANEL_GAP }
+              : { right: 'calc(360px + 1.5rem)', bottom: '6rem' }),
             width: 'min(380px, calc(100vw - 360px - 3rem))',
             maxHeight: 'min(480px, 70vh)',
             ...glass.panelDense,
@@ -105,8 +203,9 @@ export function ChatAssistant({
           }}
         >
           <div
-            className="flex items-center justify-between px-4 py-3 border-b"
+            className="flex items-center justify-between px-4 py-3 border-b cursor-move select-none"
             style={{ borderColor: colors.border }}
+            onMouseDown={startDrag}
           >
             <div className="min-w-0">
               <p className="text-sm font-bold" style={{ color: colors.white }}>Mortgage &amp; Real Estate</p>

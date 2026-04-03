@@ -9,6 +9,10 @@ export const CHAT_SYSTEM_PROMPT =
 const MAX_MESSAGES = 24;
 const MAX_TOTAL_CHARS = 12000;
 const MAX_TOOL_ROUNDS = 5;
+/** Preview rows sent to the model (token limit). */
+const MAX_LISTING_PREVIEW = 15;
+/** Max property IDs sent to the client for map/list (must match total_matched when below cap). */
+const MAX_IDS_FOR_UI = 2000;
 
 type ChatRole = 'user' | 'assistant';
 
@@ -43,8 +47,13 @@ function str(row: GenericRow, key: string): string {
   return typeof v === 'string' ? v : v != null ? String(v) : '';
 }
 
-function searchListings(rows: GenericRow[], args: SearchListingsArgs): { listings: object[]; total_matched: number } {
-  const limit = Math.min(15, Math.max(1, args.limit ?? 8));
+function searchListings(rows: GenericRow[], args: SearchListingsArgs): {
+  listings: object[];
+  total_matched: number;
+  matchingIdsForUi: string[];
+  toolPayload: Record<string, unknown>;
+} {
+  const previewLimit = Math.min(MAX_LISTING_PREVIEW, Math.max(1, args.limit ?? 8));
   let filtered = rows.filter((row) => {
     const price = num(row, 'price');
     if (args.min_price != null && price < args.min_price) return false;
@@ -77,8 +86,14 @@ function searchListings(rows: GenericRow[], args: SearchListingsArgs): { listing
 
   filtered.sort((a, b) => num(a, 'price') - num(b, 'price'));
   const total_matched = filtered.length;
-  const slice = filtered.slice(0, limit);
-  const listings = slice.map((row) => ({
+
+  const matchingIdsForUi = filtered
+    .slice(0, MAX_IDS_FOR_UI)
+    .map((row) => str(row, 'id'))
+    .filter((id) => id.length > 0);
+
+  const previewSlice = filtered.slice(0, previewLimit);
+  const listings = previewSlice.map((row) => ({
     id: str(row, 'id'),
     address: str(row, 'address'),
     city: str(row, 'city'),
@@ -92,14 +107,26 @@ function searchListings(rows: GenericRow[], args: SearchListingsArgs): { listing
     detailUrl: str(row, 'detailUrl'),
   }));
 
-  return { listings, total_matched };
+  const idsTruncated = total_matched > matchingIdsForUi.length;
+  const toolPayload: Record<string, unknown> = {
+    listings,
+    total_matched,
+    listings_preview_count: listings.length,
+    properties_shown_in_app: matchingIdsForUi.length,
+    ids_truncated: idsTruncated,
+  };
+  if (idsTruncated) {
+    toolPayload.note = `There are ${total_matched} matches; the app list and map include the first ${matchingIdsForUi.length} (sorted by price).`;
+  }
+
+  return { listings, total_matched, matchingIdsForUi, toolPayload };
 }
 
 function buildSystemPrompt(focusedProperty: unknown): string {
   let base =
     CHAT_SYSTEM_PROMPT +
     '\n\nYou can call the search_listings tool to find real homes from the app’s Salt Lake area listing database. When the user asks for homes matching price, beds, or location keywords, use the tool. Describe only listings returned by the tool; do not invent addresses or prices.' +
-    '\n\nAfter search_listings returns results: the app shows those homes in the right-hand list and on the map. Keep your chat reply short (2–4 sentences). Briefly confirm the criteria you used, state roughly how many matches there were (use total_matched from the tool if helpful), and say the matches are shown in the list—do not enumerate addresses, prices, or bed counts in the chat. If there are zero matches, say so in one or two sentences and suggest relaxing filters. Match the user’s language (e.g. Korean if they wrote in Korean).' +
+    '\n\nAfter search_listings returns results: the app shows those homes in the right-hand list and on the map (properties_shown_in_app matches what the user sees; use total_matched for how many fit the search). If ids_truncated is true, say the app shows the first N matches of a larger set. Keep your chat reply short (2–4 sentences). Briefly confirm the criteria you used, state roughly how many matches there were (use total_matched from the tool if helpful), and say the matches are shown in the list—do not enumerate addresses, prices, or bed counts in the chat. If there are zero matches, say so in one or two sentences and suggest relaxing filters. Match the user’s language (e.g. Korean if they wrote in Korean).' +
     '\n\nFor mortgage or general questions that do not require search_listings, answer as usual with appropriate detail.';
 
   if (
@@ -134,7 +161,11 @@ const SEARCH_LISTINGS_TOOL = {
         max_price: { type: 'number', description: 'Maximum list price in USD' },
         min_beds: { type: 'integer', description: 'Minimum bedrooms' },
         max_beds: { type: 'integer', description: 'Maximum bedrooms' },
-        limit: { type: 'integer', description: 'Max number of listings to return (default 8, max 15)' },
+        limit: {
+          type: 'integer',
+          description:
+            'Max rows in the text preview for the assistant (default 8, max 15). The app still shows all matches up to 2000 homes in the list.',
+        },
       },
     },
   },
@@ -199,13 +230,9 @@ chatRouter.post('/chat', async (req, res) => {
   const accumulatedListingIds: string[] = [];
   const seenIds = new Set<string>();
 
-  function appendListingIdsFromResult(listings: object[]) {
+  function appendListingIdsFromSearch(ids: string[]) {
     searchListingsInvoked = true;
-    for (const item of listings) {
-      const id =
-        item && typeof item === 'object' && 'id' in item && typeof (item as { id: unknown }).id === 'string'
-          ? (item as { id: string }).id
-          : '';
+    for (const id of ids) {
       if (!id || seenIds.has(id)) continue;
       seenIds.add(id);
       accumulatedListingIds.push(id);
@@ -249,11 +276,11 @@ chatRouter.post('/chat', async (req, res) => {
           }
           const data = await getRows();
           const result = searchListings(data, args);
-          appendListingIdsFromResult(result.listings);
+          appendListingIdsFromSearch(result.matchingIdsForUi);
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,
-            content: JSON.stringify(result),
+            content: JSON.stringify(result.toolPayload),
           });
         }
         continue;

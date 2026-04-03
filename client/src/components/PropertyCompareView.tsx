@@ -43,58 +43,6 @@ function noiseScore(level: 'low' | 'medium' | 'high'): number {
 
 const CRIME_COLORS: Record<string, string> = { low: '#4ade80', medium: '#fbbf24', high: '#f87171' };
 
-/* ─── Row renderer ────────────────────────────────────────── */
-function Row({
-  label,
-  icon: Icon,
-  values,
-  render,
-  winners,
-  n,
-}: {
-  label: string;
-  icon: React.ElementType;
-  values: number[];
-  render: (v: number, p: Property) => React.ReactNode;
-  winners: Set<number>;
-  n: number;
-  props: Property[];
-}) {
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: `${COMPARE_LABEL_W}px repeat(${n}, ${COMPARE_COL_W}px)`,
-        borderBottom: `1px solid ${colors.border}`,
-      }}
-    >
-      <div style={{ padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 6, color: colors.whiteMuted, fontSize: 10, fontWeight: 600 }}>
-        <Icon size={11} style={{ opacity: 0.6, flexShrink: 0 }} />
-        {label}
-      </div>
-      {values.map((v, i) => (
-        <div
-          key={i}
-          style={{
-            padding: '7px 10px',
-            textAlign: 'center',
-            borderLeft: `1px solid ${colors.border}`,
-            background: winners.has(i) && winners.size < n ? `${WIN_GREEN}0d` : 'transparent',
-            fontSize: 11,
-            fontWeight: winners.has(i) && winners.size < n ? 700 : 500,
-            color: winners.has(i) && winners.size < n ? WIN_GREEN : NEUTRAL,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {render(v, {} as Property)}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /* ─── Main component ──────────────────────────────────────── */
 export function PropertyCompareView({ properties, x, y, onMove, onClose, onSeparate }: Props) {
   const [isDragging, setIsDragging] = useState(false);

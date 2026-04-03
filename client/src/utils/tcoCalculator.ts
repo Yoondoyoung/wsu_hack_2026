@@ -88,9 +88,7 @@ export function calcTCO(property: Property, inputs: TcoInputs): TcoBreakdown {
   const hoa = property.hoaFee ?? 0;
   const pmi = (loanAmount * pmiAnnualRate(inputs.downPercent)) / 12;
 
-  const grossMonthly = principalInterest + propertyTax + insurance + maint + hoa + pmi;
   const rentalIncome = effectiveRentEstimateRaw * (inputs.rentPercent / 100);
-  const netMonthly = grossMonthly - rentalIncome;
 
   const principalInterestRounded = Math.round(principalInterest);
   const propertyTaxRounded = Math.round(propertyTax);

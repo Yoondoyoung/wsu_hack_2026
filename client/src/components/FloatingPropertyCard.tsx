@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { X, GripHorizontal, Bed, Bath, Square, ShieldAlert, Volume2 } from 'lucide-react';
 import type { Property } from '../types/property';
 import { formatPrice, formatSqft } from '../utils/formatters';

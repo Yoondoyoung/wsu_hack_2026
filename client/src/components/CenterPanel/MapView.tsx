@@ -8,7 +8,7 @@ import type { MapPriceMode } from '../../App';
 import { fetchOverlay } from '../../services/api';
 import { formatPrice, formatPriceCompact, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
-import { noiseExposureLabel } from '../../utils/noiseExposure';
+import { noiseExposureColor, noiseExposureLabel } from '../../utils/noiseExposure';
 import { colors, glass } from '../../design';
 
 /** Matches `structures-fill` OCC_CLS → fill-color in this file */
@@ -236,7 +236,7 @@ function GlowMarker({
           <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>
             {crimeRiskLabel(property.crimeRiskLevel)} · {property.crimeIncidentCount ?? 0} within {property.crimeRiskRadiusMiles ?? 0.5} mi
           </p>
-          <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>
+          <p className="text-[10px] mt-0.5 font-semibold" style={{ color: noiseExposureColor(property.noiseExposureLevel) }}>
             {noiseExposureLabel(property.noiseExposureLevel)} · ~{property.noiseExposureDbAvg?.toFixed(1) ?? '—'} dB (road noise est.)
           </p>
           <p className="text-[10px] mt-0.5 truncate" style={{ color: colors.whiteSubtle }}>

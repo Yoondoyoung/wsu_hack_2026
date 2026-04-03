@@ -7,6 +7,7 @@ import type { Property } from '../types/property';
 import { formatPrice, formatSqft } from '../utils/formatters';
 import { calcTCO, TCO_DEFAULTS } from '../utils/tcoCalculator';
 import { colors, glass } from '../design';
+import { NOISE_EXPOSURE_COLORS } from '../utils/noiseExposure';
 
 /* ─── Layout constants (must match COMPARE_COL_W in App.tsx) ── */
 export const COMPARE_LABEL_W = 130;
@@ -41,7 +42,6 @@ function noiseScore(level: 'low' | 'medium' | 'high'): number {
 }
 
 const CRIME_COLORS: Record<string, string> = { low: '#4ade80', medium: '#fbbf24', high: '#f87171' };
-const NOISE_COLORS: Record<string, string> = { low: '#4ade80', medium: '#fbbf24', high: '#f87171' };
 
 /* ─── Row renderer ────────────────────────────────────────── */
 function Row({
@@ -309,7 +309,7 @@ export function PropertyCompareView({ properties, x, y, onMove, onClose, onSepar
           const isWin = winners.has(i) && winners.size < n;
           return (
             <div key={p.id} style={cellStyle(isWin)}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: NOISE_COLORS[p.noiseExposureLevel ?? 'medium'] }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: NOISE_EXPOSURE_COLORS[p.noiseExposureLevel ?? 'medium'] }}>
                 {(p.noiseExposureLevel ?? 'N/A').toUpperCase()}
               </span>
             </div>

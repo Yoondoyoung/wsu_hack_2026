@@ -8,7 +8,7 @@ import {
 import type { Property } from '../../types/property';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
-import { noiseExposureLabel } from '../../utils/noiseExposure';
+import { noiseExposureColor, noiseExposureLabel } from '../../utils/noiseExposure';
 import {
   glass, colors, TAG_STYLES,
 } from '../../design';
@@ -44,10 +44,22 @@ interface Props {
 }
 
 /* ─── Badge ────────────────────────────────────────────────── */
-function PropertyBadge({ label, icon: Icon }: { label: string; icon?: React.ElementType }) {
+function PropertyBadge({
+  label,
+  icon: Icon,
+  accentColor,
+}: {
+  label: string;
+  icon?: React.ElementType;
+  /** When set (e.g. noise tier), tints the pill like crime/tag styling. */
+  accentColor?: string;
+}) {
   const style = TAG_STYLES[label] ?? { bg: colors.whiteTint, color: colors.whiteMuted };
+  const bg = accentColor ? `${accentColor}26` : style.bg;
+  const fg = accentColor ?? style.color;
+  const border = accentColor ? `${accentColor}55` : `${style.color}30`;
   return (
-    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: style.bg, color: style.color, border: `1px solid ${style.color}30` }}>
+    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: bg, color: fg, border: `1px solid ${border}` }}>
       {Icon && <Icon size={10} />}{label}
     </span>
   );
@@ -344,7 +356,11 @@ function ExpandedDetail({
             label={crimeRiskLabel(property.crimeRiskLevel)}
             icon={ShieldAlert}
           />
-          <PropertyBadge label={noiseExposureLabel(property.noiseExposureLevel)} icon={Volume2} />
+          <PropertyBadge
+            label={noiseExposureLabel(property.noiseExposureLevel)}
+            icon={Volume2}
+            accentColor={property.noiseExposureLevel ? noiseExposureColor(property.noiseExposureLevel) : undefined}
+          />
           <span className="text-[9px] leading-tight" style={{ color: colors.whiteSubtle }}>
             {property.crimeIncidentCount ?? 0} incidents within {property.crimeRiskRadiusMiles ?? 0.5} mi
           </span>
@@ -433,6 +449,9 @@ function CompactCard({
             {property.beds}bd · {property.baths}ba · {formatSqft(property.sqft)}ft²
             <span style={{ color: TAG_STYLES[crimeRiskLabel(property.crimeRiskLevel)]?.color ?? colors.whiteSubtle }}>
               {' · '}{crimeRiskLabel(property.crimeRiskLevel)}
+            </span>
+            <span style={{ color: noiseExposureColor(property.noiseExposureLevel) }}>
+              {' · '}{noiseExposureLabel(property.noiseExposureLevel)}
             </span>
           </p>
         </div>

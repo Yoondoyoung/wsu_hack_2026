@@ -10,7 +10,7 @@ import type { MortgageRequestPayload } from '../../types/mortgage';
 import type { Property } from '../../types/property';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
-import { noiseExposureLabel } from '../../utils/noiseExposure';
+import { noiseExposureColor, noiseExposureLabel } from '../../utils/noiseExposure';
 import { colors, ctaButtonStyle, getGaugeColor, getGaugeLabel } from '../../design';
 import { calcTCO, homeAgeYears, type TcoInputs } from '../../utils/tcoCalculator';
 
@@ -621,10 +621,11 @@ export function PropertyDetail({ property, onClose, tcoInputs, onTcoInputsChange
                     {crimeRiskLabel(property.crimeRiskLevel)} ({property.crimeIncidentCount ?? 0} within {property.crimeRiskRadiusMiles ?? 0.5} mi)
                   </span>
                   <span
-                    className="flex items-center gap-1"
+                    className="flex items-center gap-1 font-medium"
+                    style={{ color: noiseExposureColor(property.noiseExposureLevel) }}
                     title="Estimated from nearby road noise segments (distance-weighted; batch-relative tier)"
                   >
-                    <Volume2 size={14} className="text-[#fbbf24]" />
+                    <Volume2 size={14} style={{ color: 'inherit' }} />
                     {noiseExposureLabel(property.noiseExposureLevel)} (~{property.noiseExposureDbAvg?.toFixed(1) ?? '—'} dB est.)
                   </span>
                 </div>

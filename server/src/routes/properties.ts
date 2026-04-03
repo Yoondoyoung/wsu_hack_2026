@@ -96,6 +96,10 @@ async function loadPropertiesFromSupabase(): Promise<GenericRow[]> {
         ...payload,
         nearestGroceryDistanceMiles: nearest,
       };
+    })
+    .filter((row) => {
+      const price = Number((row as GenericRow).price);
+      return Number.isFinite(price) && price > 0;
     });
   console.log(`Loaded ${cachedProperties.length} properties from Supabase`);
   return cachedProperties;

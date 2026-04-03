@@ -135,6 +135,7 @@ export default function App() {
   }, [schoolAgeGroups, schoolRadiusMiles]);
 
   const filteredProperties = properties.filter((p) => {
+    if (!Number.isFinite(p.price) || p.price <= 0) return false;
     if (p.price < priceRange[0] || p.price > priceRange[1]) return false;
     if (p.beds < minBeds) return false;
     if (p.baths < minBaths) return false;
@@ -161,7 +162,7 @@ export default function App() {
       const byId = new Map(properties.map((p) => [p.id, p] as const));
       return chatListingIds
         .map((id) => byId.get(id))
-        .filter((p): p is Property => p != null);
+        .filter((p): p is Property => p != null && Number.isFinite(p.price) && p.price > 0);
     }
     if (onboardingMode === 'guided' && !guidedFiltersReady) return [];
     return filteredProperties;

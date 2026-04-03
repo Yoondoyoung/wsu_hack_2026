@@ -16,6 +16,7 @@ import type {
   ChatFilterPatch,
   FocusedAnalysisContext,
   FocusedMortgagePredictorContext,
+  UserFinancialProfile,
 } from './services/chat';
 
 const SNAP_THRESHOLD = 120;        // px — float-card to float-card
@@ -65,6 +66,15 @@ export default function App() {
   const [groceryRadiusMiles, setGroceryRadiusMiles] = useState(0);
   const [mortgageContextByPropertyId, setMortgageContextByPropertyId] =
     useState<Record<string, FocusedMortgagePredictorContext | undefined>>({});
+
+  const [userFinancialProfile, setUserFinancialProfile] = useState<UserFinancialProfile | null>(() => {
+    try {
+      const stored = sessionStorage.getItem('userFinancialProfile');
+      return stored ? (JSON.parse(stored) as UserFinancialProfile) : null;
+    } catch {
+      return null;
+    }
+  });
   /** When set, map + list show only these IDs (from chat search_listings). `null` = use slider filters. */
   const [chatListingIds, setChatListingIds] = useState<string[] | null>(null);
   const [guidedFiltersReady, setGuidedFiltersReady] = useState(false);
@@ -449,6 +459,20 @@ export default function App() {
     [],
   );
 
+  const handleProfileChange = useCallback((patch: UserFinancialProfile) => {
+    setUserFinancialProfile((prev) => {
+      const next: UserFinancialProfile = {
+        annualIncome:       patch.annualIncome       ?? prev?.annualIncome       ?? 85000,
+        monthlyDebt:        patch.monthlyDebt        ?? prev?.monthlyDebt        ?? 0,
+        creditScoreRange:   patch.creditScoreRange   ?? prev?.creditScoreRange   ?? '720-759',
+        loanType:           patch.loanType           ?? prev?.loanType           ?? 'conventional',
+        downPaymentPercent: patch.downPaymentPercent ?? prev?.downPaymentPercent ?? 20,
+      };
+      try { sessionStorage.setItem('userFinancialProfile', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
   return (
     <DashboardLayout>
       {/* Map — full bleed behind panels */}
@@ -558,6 +582,7 @@ export default function App() {
           onClearChatListView={() => setChatListingIds(null)}
           mortgageContextByPropertyId={mortgageContextByPropertyId}
           onMortgageContextChange={handleMortgageContextChange}
+          userFinancialProfile={userFinancialProfile}
         />
       </div>
 
@@ -610,6 +635,8 @@ export default function App() {
         onChatListingResult={handleChatListingResult}
         onFilterPatch={handleFilterPatch}
         compareProperties={chatCompareProperties}
+        userFinancialProfile={userFinancialProfile}
+        onProfileChange={handleProfileChange}
       />
 
     </DashboardLayout>

@@ -6,7 +6,7 @@ import {
   ShieldAlert, DollarSign, TrendingDown, GripVertical,
 } from 'lucide-react';
 import type { Property } from '../../types/property';
-import type { FocusedMortgagePredictorContext } from '../../services/chat';
+import type { FocusedMortgagePredictorContext, UserFinancialProfile } from '../../services/chat';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
 import { noiseExposureColor, noiseExposureLabel } from '../../utils/noiseExposure';
@@ -44,6 +44,7 @@ interface Props {
   onClearChatListView?: () => void;
   mortgageContextByPropertyId?: Record<string, FocusedMortgagePredictorContext | undefined>;
   onMortgageContextChange?: (propertyId: string, next: FocusedMortgagePredictorContext) => void;
+  userFinancialProfile?: UserFinancialProfile | null;
 }
 
 /* ─── Badge ────────────────────────────────────────────────── */
@@ -528,6 +529,7 @@ export function RightPanel({
   onClearChatListView,
   mortgageContextByPropertyId,
   onMortgageContextChange,
+  userFinancialProfile,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLDivElement>(null);
@@ -682,6 +684,7 @@ export function RightPanel({
           initialMortgageContext={mortgageContextByPropertyId?.[detailProperty.id] ?? null}
           onMortgageContextChange={onMortgageContextChange}
           onShowRoute={onShowRoute}
+          userFinancialProfile={userFinancialProfile}
         />
       )}
     </>

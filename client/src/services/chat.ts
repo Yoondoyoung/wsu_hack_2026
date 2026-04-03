@@ -1,6 +1,8 @@
 import type { Property } from '../types/property';
-import type { MortgageRequestPayload, MortgageResponse } from '../types/mortgage';
+import type { MortgageRequestPayload, MortgageResponse, UserFinancialProfile } from '../types/mortgage';
 import type { TcoInputs } from '../utils/tcoCalculator';
+
+export type { UserFinancialProfile };
 
 export type ChatMessageRole = 'user' | 'assistant';
 
@@ -22,13 +24,15 @@ export interface ChatPostResult {
   listingIds?: string[];
   filterPatch?: ChatFilterPatch;
   unsupportedConstraints?: string[];
+  profilePatch?: UserFinancialProfile;
 }
 
 export interface MortgagePredictorFormState {
   annualIncome: number;
-  totalDebt: number;
-  loanAmount: number;
-  downPayment: number;
+  monthlyDebt: number;
+  downPaymentPercent: number;
+  creditScoreRange: import('../types/mortgage').CreditScoreRange;
+  loanType: import('../types/mortgage').LoanType;
 }
 
 export interface MortgageScenarioSnapshot {
@@ -160,9 +164,10 @@ function serializeFocusedAnalysisForChat(ctx: FocusedAnalysisContext): Record<st
     const predictor: Record<string, unknown> = {
       inputs: {
         annualIncome: Math.round(mp.inputs.annualIncome),
-        totalDebt: Math.round(mp.inputs.totalDebt),
-        loanAmount: Math.round(mp.inputs.loanAmount),
-        downPayment: Math.round(mp.inputs.downPayment),
+        monthlyDebt: Math.round(mp.inputs.monthlyDebt),
+        downPaymentPercent: mp.inputs.downPaymentPercent,
+        creditScoreRange: mp.inputs.creditScoreRange,
+        loanType: mp.inputs.loanType,
       },
     };
     if (mp.lastPayload) predictor.lastPayload = mp.lastPayload;
@@ -186,6 +191,7 @@ export async function postChat(
     mode?: 'browse' | 'guided';
     compareProperties?: Property[] | null;
     focusedAnalysis?: FocusedAnalysisContext | null;
+    userFinancialProfile?: UserFinancialProfile | null;
   },
 ): Promise<ChatPostResult> {
   const body: {
@@ -194,6 +200,7 @@ export async function postChat(
     mode?: 'browse' | 'guided';
     compareProperties?: Record<string, unknown>[];
     focusedAnalysis?: Record<string, unknown>;
+    userFinancialProfile?: UserFinancialProfile;
   } = { messages };
   if (options?.focusedProperty) {
     body.focusedProperty = serializePropertyForChat(options.focusedProperty);
@@ -207,12 +214,15 @@ export async function postChat(
   if (options?.focusedAnalysis) {
     body.focusedAnalysis = serializeFocusedAnalysisForChat(options.focusedAnalysis);
   }
+  if (options?.userFinancialProfile) {
+    body.userFinancialProfile = options.userFinancialProfile;
+  }
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  const data = (await res.json()) as ChatResponse & { error?: string };
+  const data = (await res.json()) as ChatResponse & { error?: string; profilePatch?: UserFinancialProfile };
   if (!res.ok) {
     throw new Error(data.error ?? `Chat request failed (${res.status})`);
   }
@@ -224,5 +234,6 @@ export async function postChat(
     listingIds: data.listingIds,
     filterPatch: data.filterPatch,
     unsupportedConstraints: data.unsupportedConstraints,
+    profilePatch: data.profilePatch,
   };
 }

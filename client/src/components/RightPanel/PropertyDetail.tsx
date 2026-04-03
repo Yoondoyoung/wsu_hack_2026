@@ -2,21 +2,22 @@ import { useEffect, useState, useMemo, useCallback, useRef, type ElementType, ty
 import {
   X, ChevronLeft, ChevronRight, Bed, Bath, Square, Flame, Snowflake, Car, Wrench, Building,
   GraduationCap, User, Phone, Clock, Eye, Heart, TrendingUp, ExternalLink, ShieldAlert, Volume2,
-  AlertCircle, DollarSign, TrendingDown, Lightbulb, ArrowUp, ShoppingCart, Navigation,
+  DollarSign, TrendingDown, ShoppingCart, Navigation,
+  ChevronDown, CheckCircle, XCircle, AlertTriangle, Zap, Info,
 } from 'lucide-react';
 import { useNearbyGrocery } from '../../hooks/useNearbyGrocery';
-import { useMortgagePredictor, type ScenarioResult } from '../../hooks/useMortgagePredictor';
-import type { MortgageRequestPayload } from '../../types/mortgage';
+import { useMortgagePredictor } from '../../hooks/useMortgagePredictor';
+import type { MortgageRequestPayload, UserFinancialProfile, CreditScoreRange, LoanType } from '../../types/mortgage';
 import type { Property } from '../../types/property';
 import type {
   FocusedMortgagePredictorContext,
   MortgagePredictorFormState,
-  MortgageScenarioSnapshot,
 } from '../../services/chat';
+import { computeMortgageReadiness, generateMortgageTips } from '../../utils/mortgageCalculations';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
 import { noiseExposureColor, noiseExposureLabel } from '../../utils/noiseExposure';
-import { colors, ctaButtonStyle, getGaugeColor, getGaugeLabel } from '../../design';
+import { colors, ctaButtonStyle } from '../../design';
 import { calcTCO, homeAgeYears, type TcoInputs } from '../../utils/tcoCalculator';
 
 interface Props {
@@ -26,6 +27,7 @@ interface Props {
   onTcoInputsChange: (next: TcoInputs) => void;
   initialMortgageContext?: FocusedMortgagePredictorContext | null;
   onMortgageContextChange?: (propertyId: string, next: FocusedMortgagePredictorContext) => void;
+  userFinancialProfile?: UserFinancialProfile | null;
   onShowRoute?: (
     from: [number, number],
     to: [number, number],
@@ -61,38 +63,32 @@ function Stat({ label, value }: { label: string; value: string | number | null }
   );
 }
 
-const FIELD_DEFAULTS = {
+const PROFILE_DEFAULTS: MortgagePredictorFormState = {
   annualIncome: 85000,
-  totalDebt: 15000,
-  loanAmount: 300000,
-  downPayment: 80000,
+  monthlyDebt: 500,
+  downPaymentPercent: 20,
+  creditScoreRange: '720-759',
+  loanType: 'conventional',
 };
 const DESCRIPTION_PREVIEW_CHARS = 260;
 
-function computePayload(f: typeof FIELD_DEFAULTS, property: Property): MortgageRequestPayload {
-  const propertyValue = property.price > 0 ? property.price : (f.loanAmount + f.downPayment);
-  const loanAmount = Math.max(0, Math.round(propertyValue - f.downPayment));
-  const dti = f.annualIncome > 0 ? (f.totalDebt / f.annualIncome) * 100 : 36;
-  let dtiStr = '36';
 
-  if (dti < 30) dtiStr = '20%-<30%';
-  else if (dti < 36) dtiStr = '30%-<36%';
-  else if (dti < 40) dtiStr = '36';
-  else if (dti < 43) dtiStr = '40';
-  else if (dti < 50) dtiStr = '43';
-  else dtiStr = '50%-60%';
-
+function buildAiPayload(
+  f: MortgagePredictorFormState,
+  readiness: ReturnType<typeof computeMortgageReadiness>,
+  property: Property,
+): MortgageRequestPayload {
   return {
-    loan_amount: loanAmount,
-    property_value: propertyValue,
-    income: Math.round(f.annualIncome / 1000),
-    debt_to_income_ratio: dtiStr,
-    loan_type: 1,
-    loan_purpose: 1,
-    loan_term: 360,
-    applicant_age: '35-44',
-    applicant_sex: 1,
-    occupancy_type: 1,
+    property_price:      property.price > 0 ? property.price : readiness.loanAmount + readiness.downAmount,
+    loan_amount:         readiness.loanAmount,
+    ltv:                 readiness.ltv,
+    annual_income:       f.annualIncome,
+    monthly_debt:        f.monthlyDebt,
+    front_end_dti:       readiness.frontEndDTI,
+    back_end_dti:        readiness.backEndDTI,
+    credit_score_range:  f.creditScoreRange,
+    loan_type:           f.loanType,
+    down_payment_percent: f.downPaymentPercent,
   };
 }
 
@@ -110,45 +106,6 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
           className="flex-1 min-w-0 bg-transparent text-sm text-[#e2e2f0] focus:outline-none"
         />
       </div>
-    </div>
-  );
-}
-
-function CircularGauge({ value }: { value: number }) {
-  const r = 50;
-  const circumference = 2 * Math.PI * r;
-  const offset = circumference * (1 - value / 100);
-  const { main: color, glow } = getGaugeColor(value);
-  const label = getGaugeLabel(value);
-
-  return (
-    <div className="flex flex-col items-center gap-2 pt-2">
-      <svg viewBox="0 0 120 120" className="w-28 h-28">
-        <defs>
-          <filter id="gauge-glow-modal" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="3" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-        </defs>
-        <circle cx="60" cy="60" r={r} fill="none" stroke={colors.whiteDim} strokeWidth="9" />
-        <circle
-          cx="60"
-          cy="60"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="9"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          transform="rotate(-90 60 60)"
-          filter="url(#gauge-glow-modal)"
-          style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1), stroke 0.5s' }}
-        />
-        <text x="60" y="56" textAnchor="middle" fill={colors.white} fontSize="24" fontWeight="800">{value}%</text>
-        <text x="60" y="72" textAnchor="middle" fill={colors.whiteMuted} fontSize="8" letterSpacing="1.5">APPROVAL</text>
-      </svg>
-      <p className="text-xs font-semibold" style={{ color, textShadow: `0 0 12px ${glow}` }}>{label}</p>
     </div>
   );
 }
@@ -330,172 +287,441 @@ function TrueMonthlyCostPanel({
   );
 }
 
-function ImprovementTips({ scenarios, baseConfidence }: { scenarios: ScenarioResult[]; baseConfidence: number }) {
-  const positiveTips = scenarios.filter((s) => s.delta > 0);
-  if (positiveTips.length === 0) return null;
+// ─── Reusable sub-components ────────────────────────────────
 
+function RLabel({ children }: { children: ReactNode }) {
+  return <p className="text-[9px] font-bold uppercase tracking-widest text-[#6366f1] mb-1.5">{children}</p>;
+}
+
+function DtiBar({ label, value, limit, color }: { label: string; value: number; limit: number; color: string }) {
+  const pct = Math.min(100, (value / limit) * 100);
+  const ok = value <= limit;
   return (
-    <div className="mt-3">
-      <h4 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-[#8888a8] mb-2">
-        <Lightbulb size={12} className="text-amber-400" />How to improve
-      </h4>
-      <div className="space-y-1.5">
-        {positiveTips.slice(0, 2).map((tip) => (
-          <div
-            key={tip.scenario.id}
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg border"
-            style={{ background: 'rgba(16,185,129,0.06)', borderColor: 'rgba(16,185,129,0.2)' }}
-          >
-            <ArrowUp size={13} className="text-emerald-400 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-[#e2e2f0]">{tip.scenario.label}</p>
-              <p className="text-[10px] text-[#8888a8]">{tip.scenario.description}</p>
-            </div>
-            <span className="flex-shrink-0 text-xs font-black tabular-nums text-emerald-400">
-              +{tip.delta}%
-            </span>
-          </div>
-        ))}
+    <div className="space-y-0.5">
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-[#8888a8]">{label}</span>
+        <span className="tabular-nums font-semibold" style={{ color: ok ? '#6ee7b7' : '#f87171' }}>
+          {value.toFixed(0)}% <span className="text-[#555]">/ {limit}%</span>
+        </span>
       </div>
-      {baseConfidence < 70 && (
-        <p className="text-[9px] text-[#555] mt-2 leading-relaxed">
-          Combine multiple improvements for a stronger application.
-        </p>
-      )}
+      <div className="h-1.5 rounded-full bg-[#1a1a2e] overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${pct}%`, background: ok ? color : '#ef4444' }} />
+      </div>
     </div>
   );
 }
 
+function FeeRow({ label, low, high }: { label: string; low: number; high: number }) {
+  const fmt = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v}`;
+  return (
+    <div className="flex justify-between text-[10px]">
+      <span className="text-[#8888a8]">{label}</span>
+      <span className="text-[#e2e2f0] tabular-nums">{fmt(low)} – {fmt(high)}</span>
+    </div>
+  );
+}
+
+function Check({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 text-[10px]">
+      {ok
+        ? <CheckCircle size={11} className="text-emerald-400 flex-shrink-0" />
+        : <XCircle size={11} className="text-red-400 flex-shrink-0" />}
+      <span style={{ color: ok ? '#6ee7b7' : '#f87171' }}>{label}</span>
+    </div>
+  );
+}
+
+// ─── Main panel ───────────────────────────────────────────────
+
 function MortgagePredictorPanel({
   property,
+  userProfile,
   initialContext,
   onContextChange,
 }: {
   property: Property;
+  userProfile?: UserFinancialProfile | null;
   initialContext?: FocusedMortgagePredictorContext | null;
   onContextChange?: (propertyId: string, next: FocusedMortgagePredictorContext) => void;
 }) {
+  // ── Form state ──
   const [fields, setFields] = useState<MortgagePredictorFormState>(() => {
+    if (userProfile) return { ...PROFILE_DEFAULTS, ...userProfile };
     if (initialContext?.inputs) return initialContext.inputs;
-    return {
-      annualIncome: FIELD_DEFAULTS.annualIncome,
-      totalDebt: FIELD_DEFAULTS.totalDebt,
-      loanAmount: FIELD_DEFAULTS.loanAmount,
-      downPayment: FIELD_DEFAULTS.downPayment,
-    };
+    return { ...PROFILE_DEFAULTS };
   });
-  const [lastPayload, setLastPayload] = useState<MortgageRequestPayload | undefined>(
-    initialContext?.lastPayload,
-  );
-  const { result, scenarios, loading, error, predict } = useMortgagePredictor();
-  const seededPropertyIdRef = useRef<string | null>(null);
+  const [fieldsOpen, setFieldsOpen] = useState(!userProfile);
+  const [feesOpen, setFeesOpen] = useState(false);
+  const [lastPayload, setLastPayload] = useState<MortgageRequestPayload | undefined>(initialContext?.lastPayload);
+  const { result: mlResult, loading: mlLoading, error: mlError, predict } = useMortgagePredictor();
+  const seededRef = useRef<string | null>(null);
 
+  // Sync from userProfile when it's first set or updated
   useEffect(() => {
-    if (seededPropertyIdRef.current === property.id) return;
-    seededPropertyIdRef.current = property.id;
+    if (!userProfile) return;
+    setFields((prev) => ({
+      ...prev,
+      annualIncome:       userProfile.annualIncome,
+      monthlyDebt:        userProfile.monthlyDebt,
+      creditScoreRange:   userProfile.creditScoreRange,
+      loanType:           userProfile.loanType,
+      downPaymentPercent: userProfile.downPaymentPercent,
+    }));
+    setFieldsOpen(false);
+  }, [userProfile]);
 
-    if (initialContext?.inputs) {
-      setFields(initialContext.inputs);
-      setLastPayload(initialContext.lastPayload);
-      return;
+  // Reset on property change (keep profile inputs, just not ML result)
+  useEffect(() => {
+    if (seededRef.current === property.id) return;
+    seededRef.current = property.id;
+    if (!userProfile && !initialContext?.inputs) {
+      setFields({ ...PROFILE_DEFAULTS });
     }
-    setFields({
-      annualIncome: FIELD_DEFAULTS.annualIncome,
-      totalDebt: FIELD_DEFAULTS.totalDebt,
-      loanAmount: Math.round(property.price * 0.8),
-      downPayment: Math.round(property.price * 0.2),
-    });
     setLastPayload(undefined);
-  }, [property.id, property.price, initialContext]);
+  }, [property.id, userProfile, initialContext]);
 
+  // Emit context changes upward for chat AI
   useEffect(() => {
     if (!onContextChange) return;
-    const topScenarios: MortgageScenarioSnapshot[] = scenarios.slice(0, 2).map((s) => ({
-      label: s.scenario.label,
-      delta: s.delta,
-      confidence: s.response.confidence,
-    }));
     onContextChange(property.id, {
       inputs: fields,
       lastPayload,
-      lastResult: result ?? undefined,
-      topScenarios,
-      error,
+      lastResult: mlResult ?? undefined,
+      error: mlError,
     });
-  }, [property.id, fields, lastPayload, result, scenarios, error, onContextChange]);
+  }, [property.id, fields, lastPayload, mlResult, mlError, onContextChange]);
 
-  const set = (key: keyof typeof FIELD_DEFAULTS) => (v: number) => {
-    if (key === 'downPayment' && property.price > 0) {
-      const downPayment = Math.max(0, v);
-      setFields((prev) => ({
-        ...prev,
-        downPayment,
-        loanAmount: Math.max(0, Math.round(property.price - downPayment)),
-      }));
-      return;
-    }
+  // ── Derived readiness result (instant, no button) ──
+  const readiness = useMemo(() => computeMortgageReadiness(property, fields), [property, fields]);
+  const tips      = useMemo(() => generateMortgageTips(readiness, fields), [readiness, fields]);
 
-    if (key === 'loanAmount' && property.price > 0) {
-      const loanAmount = Math.max(0, v);
-      setFields((prev) => ({
-        ...prev,
-        loanAmount,
-        downPayment: Math.max(0, Math.round(property.price - loanAmount)),
-      }));
-      return;
-    }
+  const fmt = (v: number) => `$${Math.round(v).toLocaleString()}`;
+  const fmtK = (v: number) => v >= 1000 ? `$${Math.round(v / 1000)}k` : fmt(v);
 
-    setFields((prev) => ({ ...prev, [key]: v }));
+  const totalBar = readiness.monthly.total;
+  const barMax   = totalBar * 1.1 || 1;
+
+  const creditLabel: Record<CreditScoreRange, string> = {
+    '760+': 'Excellent (760+)', '720-759': 'Good (720–759)', '680-719': 'Fair (680–719)',
+    '640-679': 'Below avg (640–679)', '<640': 'Poor (<640)',
   };
 
+  const ltvOk    = readiness.ltv <= (fields.loanType === 'fha' ? 96.5 : 97);
+  const dtiOk    = readiness.backEndDTI <= 43;
+  const creditOk = fields.loanType === 'fha'
+    ? fields.creditScoreRange !== '<640'
+    : !['<640', '640-679'].includes(fields.creditScoreRange);
+  const noPmiOk  = readiness.ltv <= 80;
+
   return (
-    <div className="bg-[#141427] border border-[#2d2d4a] rounded-xl p-4">
-      <h3 className="text-[#e2e2f0] text-sm font-semibold mb-1">AI Mortgage Predictor</h3>
-      <p className="text-[#8888a8] text-xs mb-3">
-        Home price auto-fills loan/down payment for this listing.
-      </p>
+    <div className="bg-[#141427] border border-[#2d2d4a] rounded-xl p-4 space-y-4">
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          const payload = computePayload(fields, property);
-          setLastPayload(payload);
-          predict(payload);
-        }}
-        className="space-y-2"
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2 pt-5">
-          <MoneyInput label="Annual Income" value={fields.annualIncome} onChange={set('annualIncome')} />
-          <MoneyInput label="Current Other Debt" value={fields.totalDebt} onChange={set('totalDebt')} />
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-[#e2e2f0] text-sm font-semibold">Mortgage Readiness</h3>
+          <p className="text-[#8888a8] text-[10px] mt-0.5">
+            {userProfile ? 'Calculated from your saved profile' : 'Enter your financial details below'}
+          </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2">
-          <MoneyInput label="Loan Amount" value={fields.loanAmount} onChange={set('loanAmount')} />
-          <MoneyInput label="Down Payment" value={fields.downPayment} onChange={set('downPayment')} />
-        </div>
+        {userProfile && (
+          <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full"
+            style={{ background: 'rgba(16,185,129,0.12)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.25)' }}>
+            Profile ✓
+          </span>
+        )}
+      </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-2.5 rounded-xl text-xs font-bold tracking-wide transition-all disabled:opacity-50 mt-1"
-          style={loading ? { background: colors.whiteTint, color: colors.whiteMuted, border: `1px solid ${colors.border}` } : ctaButtonStyle}
-        >
-          {loading ? 'Calculating...' : 'Calculate Approval'}
+      {/* ── Soft prompt when no profile ── */}
+      {!userProfile && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg border"
+          style={{ background: 'rgba(99,102,241,0.08)', borderColor: 'rgba(99,102,241,0.25)' }}>
+          <Zap size={12} className="text-[#818cf8] mt-0.5 flex-shrink-0" />
+          <p className="text-[10px] text-[#8888a8] leading-relaxed">
+            Tell the assistant your income &amp; credit score — it will auto-fill these fields for every property you browse.
+          </p>
+        </div>
+      )}
+
+      {/* ── Input fields (collapsible) ── */}
+      <div>
+        <button type="button" onClick={() => setFieldsOpen((v) => !v)}
+          className="flex items-center gap-1.5 text-[10px] font-semibold text-[#8888a8] hover:text-[#e2e2f0] transition-colors mb-2">
+          <ChevronDown size={12} className={`transition-transform ${fieldsOpen ? 'rotate-0' : '-rotate-90'}`} />
+          {fieldsOpen ? 'Hide inputs' : 'Edit inputs'}
         </button>
-      </form>
 
-      {error && (
-        <div className="mt-3 flex items-start gap-2 p-2 rounded-lg border border-red-500/30 bg-red-500/10">
-          <AlertCircle size={12} className="text-red-300 mt-0.5 flex-shrink-0" />
-          <p className="text-[11px] text-red-200">{error}</p>
+        {fieldsOpen && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <MoneyInput label="Annual Income" value={fields.annualIncome}
+                onChange={(v) => setFields((p) => ({ ...p, annualIncome: v }))} />
+              <MoneyInput label="Monthly Debt" value={fields.monthlyDebt}
+                onChange={(v) => setFields((p) => ({ ...p, monthlyDebt: v }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold uppercase tracking-widest text-[#8888a8]">Down %</label>
+                <div className="flex items-center gap-1 px-3 py-2 bg-[#0f0f1a] border border-[#2d2d4a] rounded-lg">
+                  <input type="number" min={0} max={100} step={1} value={fields.downPaymentPercent}
+                    onChange={(e) => setFields((p) => ({ ...p, downPaymentPercent: Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)) }))}
+                    className="flex-1 min-w-0 bg-transparent text-sm text-[#e2e2f0] focus:outline-none" />
+                  <span className="text-[#8888a8] text-xs">%</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold uppercase tracking-widest text-[#8888a8]">Credit</label>
+                <select value={fields.creditScoreRange}
+                  onChange={(e) => setFields((p) => ({ ...p, creditScoreRange: e.target.value as CreditScoreRange }))}
+                  className="px-2 py-2 bg-[#0f0f1a] border border-[#2d2d4a] rounded-lg text-xs text-[#e2e2f0] focus:outline-none">
+                  {(['760+', '720-759', '680-719', '640-679', '<640'] as CreditScoreRange[]).map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex rounded-lg overflow-hidden border border-[#2d2d4a] text-[10px] font-semibold">
+              {(['conventional', 'fha'] as LoanType[]).map((t) => (
+                <button key={t} type="button" onClick={() => setFields((p) => ({ ...p, loanType: t }))}
+                  className="flex-1 py-1.5 transition-colors capitalize"
+                  style={{ background: fields.loanType === t ? '#6366f1' : 'transparent', color: fields.loanType === t ? '#fff' : colors.whiteMuted }}>
+                  {t.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─────────────────────────────────────────────────────── */}
+      {/* Section 1 — Monthly Cost                              */}
+      {/* ─────────────────────────────────────────────────────── */}
+      <div className="bg-[#0f0f1a] rounded-xl p-3 space-y-2">
+        <div className="flex items-start justify-between">
+          <RLabel>Monthly Cost</RLabel>
+          <span className="text-[10px] text-[#8888a8]">{readiness.estimatedRate.toFixed(2)}% rate · {fields.loanType.toUpperCase()}</span>
         </div>
-      )}
+        <div className="flex items-baseline gap-1">
+          <span className="text-2xl font-black text-[#e2e2f0] tabular-nums">{fmt(readiness.monthly.total)}</span>
+          <span className="text-xs text-[#8888a8]">/mo</span>
+        </div>
+        <div className="space-y-1 mt-1">
+          {([
+            ['P&I',       readiness.monthly.principalInterest],
+            ['Tax',       readiness.monthly.propertyTax],
+            ['Insurance', readiness.monthly.insurance],
+            ...(readiness.monthly.pmiOrMip > 0 ? [[fields.loanType === 'fha' ? 'MIP' : 'PMI', readiness.monthly.pmiOrMip]] : []),
+            ...(readiness.monthly.hoa > 0       ? [['HOA',       readiness.monthly.hoa]]       : []),
+          ] as [string, number][]).map(([label, val]) => (
+            <div key={label} className="flex items-center gap-2">
+              <span className="text-[10px] text-[#8888a8] w-16 flex-shrink-0">{label}</span>
+              <div className="flex-1 h-1 bg-[#1a1a2e] rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-[#6366f1]" style={{ width: `${(val / barMax) * 100}%` }} />
+              </div>
+              <span className="text-[10px] tabular-nums text-[#e2e2f0] w-14 text-right">{fmt(val)}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-[9px] text-[#555] pt-1">
+          Rate based on {creditLabel[fields.creditScoreRange]}. Utah tax rate 0.58%. Estimates only.
+        </p>
+      </div>
 
-      {result && !error && (
-        <>
-          <CircularGauge value={result.confidence} />
-          <ImprovementTips scenarios={scenarios} baseConfidence={result.confidence} />
-        </>
-      )}
+      {/* ─────────────────────────────────────────────────────── */}
+      {/* Section 2 — Cash to Close                             */}
+      {/* ─────────────────────────────────────────────────────── */}
+      <div className="bg-[#0f0f1a] rounded-xl p-3 space-y-2">
+        <RLabel>Cash to Close</RLabel>
+        <div className="flex items-baseline gap-1">
+          <span className="text-xl font-black text-[#e2e2f0] tabular-nums">{fmtK(readiness.cashToClose.totalLow)}</span>
+          <span className="text-sm text-[#8888a8]">–</span>
+          <span className="text-xl font-black text-[#e2e2f0] tabular-nums">{fmtK(readiness.cashToClose.totalHigh)}</span>
+        </div>
+        <div className="space-y-1">
+          <div className="flex justify-between text-[10px]">
+            <span className="text-[#8888a8]">Down payment</span>
+            <span className="text-[#e2e2f0] tabular-nums font-semibold">{fmt(readiness.cashToClose.downPayment)}</span>
+          </div>
+          <div className="flex justify-between text-[10px]">
+            <span className="text-[#8888a8]">Closing costs</span>
+            <span className="text-[#e2e2f0] tabular-nums">{fmtK(readiness.cashToClose.closingCostsLow)} – {fmtK(readiness.cashToClose.closingCostsHigh)}</span>
+          </div>
+          <div className="flex justify-between text-[10px]">
+            <span className="text-[#8888a8]">Prepaids (tax, ins, interest)</span>
+            <span className="text-[#e2e2f0] tabular-nums">{fmtK(readiness.cashToClose.prepaidsLow)} – {fmtK(readiness.cashToClose.prepaidsHigh)}</span>
+          </div>
+          {readiness.cashToClose.fhaUpfrontMip > 0 && (
+            <div className="flex justify-between text-[10px]">
+              <span className="text-[#8888a8]">FHA upfront MIP</span>
+              <span className="text-[#e2e2f0] tabular-nums">{fmt(readiness.cashToClose.fhaUpfrontMip)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Fee breakdown accordion */}
+        <button type="button" onClick={() => setFeesOpen((v) => !v)}
+          className="flex items-center gap-1 text-[10px] text-[#6366f1] hover:text-[#818cf8] transition-colors mt-1">
+          <ChevronDown size={11} className={`transition-transform ${feesOpen ? '' : '-rotate-90'}`} />
+          Fee breakdown
+        </button>
+        {feesOpen && (
+          <div className="space-y-1 pt-1 border-t border-[#2d2d4a]">
+            <RLabel>Closing Fee Detail</RLabel>
+            <FeeRow label="Origination" low={readiness.fees.originationLow} high={readiness.fees.originationHigh} />
+            <FeeRow label="Appraisal" low={readiness.fees.appraisalLow} high={readiness.fees.appraisalHigh} />
+            <FeeRow label="Title ins + search" low={readiness.fees.titleLow} high={readiness.fees.titleHigh} />
+            <FeeRow label="Settlement / attorney" low={readiness.fees.settlementLow} high={readiness.fees.settlementHigh} />
+            <FeeRow label="Recording" low={readiness.fees.recordingLow} high={readiness.fees.recordingHigh} />
+            <FeeRow label="Home inspection" low={readiness.fees.inspectionLow} high={readiness.fees.inspectionHigh} />
+            <div className="flex justify-between text-[10px] font-semibold border-t border-[#2d2d4a] pt-1 mt-1">
+              <span className="text-[#e2e2f0]">Subtotal</span>
+              <span className="text-[#6366f1] tabular-nums">{fmtK(readiness.fees.subtotalLow)} – {fmtK(readiness.fees.subtotalHigh)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─────────────────────────────────────────────────────── */}
+      {/* Section 3 — Uncertainty Range                         */}
+      {/* ─────────────────────────────────────────────────────── */}
+      <div className="bg-[#0f0f1a] rounded-xl p-3 space-y-2">
+        <div className="flex items-center gap-1.5">
+          <RLabel>Rate Uncertainty</RLabel>
+          <Info size={10} className="text-[#555] mb-1.5" />
+        </div>
+        <div className="relative h-5">
+          {/* Track */}
+          <div className="absolute inset-y-1.5 left-0 right-0 bg-[#1a1a2e] rounded-full" />
+          {/* Filled range */}
+          <div className="absolute inset-y-1.5 bg-[#6366f1]/40 rounded-full"
+            style={{
+              left: `${((readiness.range.monthlyLow - readiness.range.monthlyLow * 0.95) / (readiness.range.monthlyHigh * 1.05 - readiness.range.monthlyLow * 0.95)) * 100}%`,
+              right: `${100 - ((readiness.range.monthlyHigh - readiness.range.monthlyLow * 0.95) / (readiness.range.monthlyHigh * 1.05 - readiness.range.monthlyLow * 0.95)) * 100}%`,
+            }} />
+          {/* Mid dot */}
+          <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#6366f1] border-2 border-[#0f0f1a]"
+            style={{ left: '50%', transform: 'translate(-50%, -50%)' }} />
+        </div>
+        <div className="flex justify-between text-[10px] tabular-nums">
+          <div className="text-center">
+            <p className="text-[#8888a8]">Low ({readiness.range.rateLow.toFixed(1)}%)</p>
+            <p className="text-[#e2e2f0] font-semibold">{fmt(readiness.range.monthlyLow)}/mo</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[#6366f1] font-bold text-[11px]">Most likely</p>
+            <p className="text-[#e2e2f0] font-black">{fmt(readiness.range.monthlyMid)}/mo</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[#8888a8]">High ({readiness.range.rateHigh.toFixed(1)}%)</p>
+            <p className="text-[#e2e2f0] font-semibold">{fmt(readiness.range.monthlyHigh)}/mo</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────── */}
+      {/* Section 4 — Qualification + DTI                       */}
+      {/* ─────────────────────────────────────────────────────── */}
+      <div className="bg-[#0f0f1a] rounded-xl p-3 space-y-3">
+        <RLabel>Qualification Check</RLabel>
+
+        {/* DTI bars */}
+        <div className="space-y-2">
+          <DtiBar label="Front-end DTI (housing / income)" value={readiness.frontEndDTI} limit={28} color="#6366f1" />
+          <DtiBar label="Back-end DTI (all debt / income)"  value={readiness.backEndDTI}  limit={43} color="#6366f1" />
+        </div>
+
+        {/* Checklist */}
+        <div className="grid grid-cols-2 gap-x-2 gap-y-1 pt-1 border-t border-[#2d2d4a]">
+          <Check ok={ltvOk}    label={`LTV ${readiness.ltv.toFixed(0)}% ≤ ${fields.loanType === 'fha' ? '96.5' : '97'}%`} />
+          <Check ok={dtiOk}    label={`DTI ${readiness.backEndDTI.toFixed(0)}% ≤ 43%`} />
+          <Check ok={creditOk} label={`Credit ${fields.creditScoreRange}`} />
+          <Check ok={noPmiOk}  label={noPmiOk ? 'No PMI (≥20% down)' : `PMI req'd (${readiness.ltv.toFixed(0)}% LTV)`} />
+        </div>
+
+        {/* Dynamic tips */}
+        {tips.length > 0 && (
+          <div className="space-y-1.5 pt-1 border-t border-[#2d2d4a]">
+            {tips.map((tip) => (
+              <div key={tip.id} className="flex items-start gap-2 px-2.5 py-2 rounded-lg"
+                style={{
+                  background: tip.type === 'warning' ? 'rgba(239,68,68,0.06)' : tip.type === 'action' ? 'rgba(16,185,129,0.06)' : 'rgba(99,102,241,0.06)',
+                  border: `1px solid ${tip.type === 'warning' ? 'rgba(239,68,68,0.2)' : tip.type === 'action' ? 'rgba(16,185,129,0.2)' : 'rgba(99,102,241,0.2)'}`,
+                }}>
+                {tip.type === 'warning'
+                  ? <AlertTriangle size={11} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                  : tip.type === 'action'
+                  ? <CheckCircle size={11} className="text-emerald-400 mt-0.5 flex-shrink-0" />
+                  : <Info size={11} className="text-[#818cf8] mt-0.5 flex-shrink-0" />}
+                <p className="text-[10px] text-[#e2e2f0] leading-relaxed">{tip.message}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* AI approval check (optional, async) */}
+        <div className="pt-1 border-t border-[#2d2d4a]">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] text-[#8888a8]">AI Underwriting Signal</p>
+            <button type="button"
+              onClick={() => { const p = buildAiPayload(fields, readiness, property); setLastPayload(p); predict(p); }}
+              disabled={mlLoading}
+              className="px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all disabled:opacity-50"
+              style={mlLoading ? { background: colors.whiteTint, color: colors.whiteMuted, border: `1px solid ${colors.border}` } : ctaButtonStyle}>
+              {mlLoading ? 'Analyzing…' : mlResult ? 'Re-run' : 'Run AI check →'}
+            </button>
+          </div>
+          {mlError && (
+            <p className="text-[10px] text-red-300 bg-red-500/10 rounded-lg px-2 py-1.5">{mlError}</p>
+          )}
+          {mlResult && !mlError && (
+            <div className="space-y-2">
+              {/* Confidence bar */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-2 bg-[#1a1a2e] rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${mlResult.confidence}%`, background: mlResult.confidence >= 70 ? '#6ee7b7' : mlResult.confidence >= 55 ? '#fbbf24' : '#f87171' }} />
+                </div>
+                <span className="text-sm font-black tabular-nums"
+                  style={{ color: mlResult.confidence >= 70 ? '#6ee7b7' : mlResult.confidence >= 55 ? '#fbbf24' : '#f87171' }}>
+                  {mlResult.confidence}%
+                </span>
+              </div>
+              {/* One-line summary */}
+              {mlResult.message && (
+                <p className="text-[10px] text-[#c4c4d8] leading-relaxed">{mlResult.message}</p>
+              )}
+              {/* Strengths */}
+              {mlResult.strengths.length > 0 && (
+                <div className="space-y-1">
+                  {mlResult.strengths.map((s, i) => (
+                    <div key={i} className="flex items-start gap-1.5">
+                      <CheckCircle size={10} className="text-emerald-400 mt-0.5 flex-shrink-0" />
+                      <span className="text-[10px] text-emerald-300">{s}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Risks */}
+              {mlResult.risks.length > 0 && (
+                <div className="space-y-1">
+                  {mlResult.risks.map((r, i) => (
+                    <div key={i} className="flex items-start gap-1.5">
+                      <AlertTriangle size={10} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                      <span className="text-[10px] text-amber-200">{r}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <p className="text-[9px] text-[#444] leading-relaxed">
+        Estimates only. Not a lender quote or financial advice. Rates, taxes, and fees vary.
+      </p>
     </div>
   );
 }
@@ -585,6 +811,7 @@ export function PropertyDetail({
   onTcoInputsChange,
   initialMortgageContext,
   onMortgageContextChange,
+  userFinancialProfile,
   onShowRoute,
 }: Props) {
   const [photoIdx, setPhotoIdx] = useState(0);
@@ -831,6 +1058,7 @@ export function PropertyDetail({
                 onInputsChange={onTcoInputsChange}
               />
               <MortgagePredictorPanel
+                userProfile={userFinancialProfile}
                 property={property}
                 initialContext={initialMortgageContext}
                 onContextChange={onMortgageContextChange}

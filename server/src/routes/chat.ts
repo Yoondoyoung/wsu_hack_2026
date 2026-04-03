@@ -277,9 +277,11 @@ function buildSystemPrompt(
   mode: ChatMode,
   compareProperties: unknown,
   focusedAnalysis: unknown,
+  userFinancialProfile: unknown,
 ): string {
   let base =
     CHAT_SYSTEM_PROMPT +
+    '\n\nWhen the user provides any financial information (income, debts, credit score, down payment, loan type), call set_user_financial_profile immediately to save it — even partial info is fine. After saving, briefly confirm what was saved and mention that their Mortgage Readiness panel will now auto-calculate for any property they view. Do NOT ask for all fields at once; save what you have and continue conversation naturally.' +
     '\n\nYou can call the search_listings tool to find real homes from the app’s Salt Lake area listing database. Each listing includes a precomputed crimeRiskLevel (low/medium/high) and noiseExposureLevel (low/medium/high). Use max_crime_risk_tier: low when the user wants the lowest crime tier only; medium to allow low and medium. Use max_noise_exposure_tier: low when the user wants quieter homes; medium to allow low and medium noise tiers. When the user asks for safe areas, low crime, quiet neighborhoods, or less noise, call search_listings with these tier parameters rather than giving only generic neighborhood advice. When the user asks for homes matching price, beds, or location keywords, use the tool. Describe only listings returned by the tool; do not invent addresses or prices.' +
     '\n\nAfter search_listings returns results: the app shows those homes in the right-hand list and on the map (properties_shown_in_app matches what the user sees; use total_matched for how many fit the search). If ids_truncated is true, say the app shows the first N matches of a larger set. Keep your chat reply short (2–4 sentences). Briefly confirm the criteria you used, state roughly how many matches there were (use total_matched from the tool if helpful), and say the matches are shown in the list—do not enumerate addresses, prices, or bed counts in the chat. If there are zero matches, say so in one or two sentences and suggest relaxing filters. Match the user’s language (e.g. Korean if they wrote in Korean).' +
     '\n\nFor mortgage or general questions that do not require search_listings, answer as usual with appropriate detail.';
@@ -324,6 +326,17 @@ function buildSystemPrompt(
       '\n\nRules: (1) These values are snapshot estimates and may differ from lender quotes. (2) If mortgagePredictor.lastResult is missing, say prediction has not been run yet. (3) If the user asks about exact values, report these numbers directly and keep them consistent in the answer.';
   }
 
+  if (
+    userFinancialProfile &&
+    typeof userFinancialProfile === 'object' &&
+    !Array.isArray(userFinancialProfile)
+  ) {
+    base +=
+      '\n\n## User financial profile (already saved)\nThe user has already provided their financial profile. Use this when discussing mortgage affordability or payments for any listing:\n' +
+      JSON.stringify(userFinancialProfile) +
+      '\n\nIf the user provides updated values, call set_user_financial_profile with the new values to update it.';
+  }
+
   return base;
 }
 
@@ -361,6 +374,33 @@ const SEARCH_LISTINGS_TOOL = {
           description:
             'Optional. Filters by each listing\'s noiseExposureLevel (low/medium/high). Use low when the user wants quiet homes or low road-noise exposure; medium to include low and medium; omit or use high for no noise-tier filter.',
         },
+      },
+    },
+  },
+};
+
+const SET_USER_FINANCIAL_PROFILE_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'set_user_financial_profile',
+    description:
+      'Save the user\'s financial profile for mortgage calculations. Call this whenever the user shares their income, monthly debts, credit score, down payment, or loan type preference — even partial info. Infer reasonable defaults for unspecified fields.',
+    parameters: {
+      type: 'object',
+      properties: {
+        annual_income: { type: 'number', description: 'Annual gross income in dollars (e.g. 120000)' },
+        monthly_debt_payments: { type: 'number', description: 'Total monthly debt payments: car loans, student loans, credit card minimums in dollars (e.g. 800)' },
+        credit_score_range: {
+          type: 'string',
+          enum: ['760+', '720-759', '680-719', '640-679', '<640'],
+          description: 'Credit score tier. Map "excellent/great" → 760+, "good" → 720-759, "fair" → 680-719, "average" → 640-679, "poor/bad" → <640',
+        },
+        loan_type: {
+          type: 'string',
+          enum: ['conventional', 'fha'],
+          description: 'Loan type. Use fha when user mentions FHA, low down payment (<10%), or credit <620.',
+        },
+        down_payment_percent: { type: 'number', description: 'Down payment as a percent of home price (0–100). E.g. 20 for 20%.' },
       },
     },
   },
@@ -406,12 +446,13 @@ chatRouter.post('/chat', async (req, res) => {
     return;
   }
 
-  const { messages: raw, focusedProperty, mode: rawMode, compareProperties, focusedAnalysis } = req.body as {
+  const { messages: raw, focusedProperty, mode: rawMode, compareProperties, focusedAnalysis, userFinancialProfile } = req.body as {
     messages?: unknown;
     focusedProperty?: unknown;
     mode?: unknown;
     compareProperties?: unknown;
     focusedAnalysis?: unknown;
+    userFinancialProfile?: unknown;
   };
   if (!Array.isArray(raw)) {
     res.status(400).json({ error: 'Request body must include messages: array' });
@@ -440,6 +481,7 @@ chatRouter.post('/chat', async (req, res) => {
     mode,
     compareProperties ?? null,
     focusedAnalysis ?? null,
+    userFinancialProfile ?? null,
   );
 
   const recent = parsed.slice(-MAX_MESSAGES);
@@ -470,6 +512,7 @@ chatRouter.post('/chat', async (req, res) => {
   const seenIds = new Set<string>();
   let latestFilterPatch: SetFiltersArgs | undefined;
   let unsupportedConstraints: string[] | undefined;
+  let profilePatch: Record<string, unknown> | undefined;
 
   function appendListingIdsFromSearch(ids: string[]) {
     searchListingsInvoked = true;
@@ -485,7 +528,7 @@ chatRouter.post('/chat', async (req, res) => {
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages,
-        tools: [SEARCH_LISTINGS_TOOL, SET_FILTERS_TOOL],
+        tools: [SEARCH_LISTINGS_TOOL, SET_FILTERS_TOOL, SET_USER_FINANCIAL_PROFILE_TOOL],
         tool_choice: 'auto',
         max_tokens: 1024,
       });
@@ -501,6 +544,20 @@ chatRouter.post('/chat', async (req, res) => {
         messages.push(choice);
         for (const tc of toolCalls) {
           if (tc.type !== 'function') continue;
+          if (tc.function.name === 'set_user_financial_profile') {
+            let args: Record<string, unknown> = {};
+            try { args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>; } catch { args = {}; }
+            const patch: Record<string, unknown> = {};
+            if (typeof args.annual_income === 'number' && args.annual_income > 0) patch.annualIncome = args.annual_income;
+            if (typeof args.monthly_debt_payments === 'number') patch.monthlyDebt = args.monthly_debt_payments;
+            const validScores = ['760+', '720-759', '680-719', '640-679', '<640'];
+            if (typeof args.credit_score_range === 'string' && validScores.includes(args.credit_score_range)) patch.creditScoreRange = args.credit_score_range;
+            if (args.loan_type === 'conventional' || args.loan_type === 'fha') patch.loanType = args.loan_type;
+            if (typeof args.down_payment_percent === 'number') patch.downPaymentPercent = Math.min(100, Math.max(0, args.down_payment_percent));
+            if (Object.keys(patch).length > 0) profilePatch = patch;
+            messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ saved: patch }) });
+            continue;
+          }
           if (tc.function.name === 'set_filters') {
             let args: SetFiltersArgs = {};
             try {
@@ -555,6 +612,7 @@ chatRouter.post('/chat', async (req, res) => {
         listingIds?: string[];
         filterPatch?: SetFiltersArgs;
         unsupportedConstraints?: string[];
+        profilePatch?: Record<string, unknown>;
       } = { message: text };
       if (searchListingsInvoked) {
         payload.listingIds = accumulatedListingIds;
@@ -577,6 +635,9 @@ chatRouter.post('/chat', async (req, res) => {
       }
       if (unsupportedConstraints?.length) {
         payload.unsupportedConstraints = unsupportedConstraints;
+      }
+      if (profilePatch && Object.keys(profilePatch).length > 0) {
+        payload.profilePatch = profilePatch;
       }
       res.json(payload);
       return;

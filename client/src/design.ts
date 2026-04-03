@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { ShieldAlert, GraduationCap, Users, Volume2 } from "lucide-react";
+import { ShieldAlert, GraduationCap, Volume2 } from "lucide-react";
 
 // ── Color Palette ──
 export const colors = {
@@ -83,14 +83,6 @@ export const HEATMAP_CONFIGS: Record<string, { color: string; points: MapPoint[]
       { x: 0.5, y: 0.8 },
     ],
   },
-  population: {
-    color: "100, 140, 255",
-    points: [
-      { x: 0.4, y: 0.3 },
-      { x: 0.5, y: 0.6 },
-      { x: 0.2, y: 0.7 },
-    ],
-  },
   noise: {
     color: "255, 180, 0",
     points: [
@@ -105,7 +97,6 @@ export const HEATMAP_CONFIGS: Record<string, { color: string; points: MapPoint[]
 export const DATA_LAYERS = [
   { id: "crime", label: "Crime Hotspots", icon: ShieldAlert, color: colors.red },
   { id: "schools", label: "School Districts", icon: GraduationCap, color: colors.emerald },
-  { id: "population", label: "Population Density", icon: Users, color: colors.blue },
   { id: "noise", label: "Noise Levels", icon: Volume2, color: colors.yellow },
 ] as const;
 

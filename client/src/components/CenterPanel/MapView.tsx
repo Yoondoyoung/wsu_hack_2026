@@ -42,7 +42,6 @@ const OVERLAY_COLORS: Record<OverlayType, string[]> = {
   crime:      ['rgba(0,0,0,0)', '#7f1d1d', '#ff4060', colors.red],
   schools:    ['rgba(0,0,0,0)', '#064e3b', '#00b862', colors.emerald],
   grocery:    ['rgba(0,0,0,0)', '#422006', '#ea580c', '#fb923c'],
-  population: ['rgba(0,0,0,0)', '#3b2000', '#d47f00', colors.yellow],
   noise:      ['rgba(0,0,0,0)', '#2e1065', '#7c3aed', '#c084fc'],
   structures: ['rgba(0,0,0,0)', '#0c3f5c', '#0090c8', colors.cyan],
 };
@@ -700,7 +699,7 @@ function MapViewInner({
           </Source>
         )}
 
-        {/* Other heatmap overlays (population, schools — not noise) */}
+        {/* Other heatmap overlays (schools — not noise) */}
         {Array.from(activeOverlays).map((overlay) =>
           overlay !== 'structures' && overlay !== 'crime' && overlay !== 'grocery' && overlay !== 'noise' && overlayData[overlay] ? (
             <Source key={overlay} id={`source-${overlay}`} type="geojson" data={overlayData[overlay]}>

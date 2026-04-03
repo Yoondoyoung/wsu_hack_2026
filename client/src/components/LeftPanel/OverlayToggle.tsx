@@ -1,4 +1,4 @@
-import { ShieldAlert, GraduationCap, ShoppingCart, Users, Volume2, Building2 } from 'lucide-react';
+import { ShieldAlert, GraduationCap, ShoppingCart, Volume2, Building2 } from 'lucide-react';
 import type { OverlayType } from '../../types/map';
 import { colors } from '../../design';
 
@@ -17,7 +17,6 @@ const OVERLAYS: {
   { type: 'crime',      label: 'Crime Hotspots',      Icon: ShieldAlert,   color: colors.red     },
   { type: 'schools',    label: 'School Districts',     Icon: GraduationCap, color: colors.emerald },
   { type: 'grocery',    label: 'Grocery Stores',       Icon: ShoppingCart,    color: '#fb923c'      },
-  { type: 'population', label: 'Population Density',   Icon: Users,         color: colors.blue    },
   { type: 'noise',      label: 'Noise Levels',         Icon: Volume2,       color: colors.yellow  },
   { type: 'structures', label: 'Building Footprints',  Icon: Building2,     color: colors.cyan    },
 ];

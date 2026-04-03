@@ -310,7 +310,7 @@ propertiesRouter.get('/nearby-grocery', async (req, res) => {
 
 propertiesRouter.get('/overlays/:type', async (req, res) => {
   const { type } = req.params;
-  const validTypes = ['crime', 'schools', 'grocery', 'population', 'noise', 'structures'];
+  const validTypes = ['crime', 'schools', 'grocery', 'noise', 'structures'];
 
   if (!validTypes.includes(type)) {
     res.status(400).json({ error: `Invalid overlay type` });

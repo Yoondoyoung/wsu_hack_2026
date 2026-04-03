@@ -6,7 +6,6 @@ import {
   Satellite,
   Shield,
   GraduationCap,
-  Users,
   Volume2,
   Building2,
   SlidersHorizontal,
@@ -96,14 +95,6 @@ const OVERLAY_CONFIG: {
     color: '#fb923c',
     bgColor: 'rgba(251,146,60,0.12)',
     description: 'Supermarkets & markets',
-  },
-  {
-    key: 'population',
-    label: 'Population Density',
-    icon: Users,
-    color: '#8b5cf6',
-    bgColor: 'rgba(139,92,246,0.12)',
-    description: 'Residents per sq mi',
   },
   {
     key: 'noise',

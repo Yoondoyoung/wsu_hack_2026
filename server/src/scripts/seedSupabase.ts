@@ -386,7 +386,7 @@ async function main() {
     };
   });
 
-  const overlayTypes = ['population', 'noise', 'structures'] as const;
+  const overlayTypes = ['noise', 'structures'] as const;
   const overlayRows = overlayTypes.map((type) => {
     const filePath =
       type === 'noise'

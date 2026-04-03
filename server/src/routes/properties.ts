@@ -199,11 +199,24 @@ async function loadSchoolsGeoJSON() {
   return schoolsGeoJSON;
 }
 
-function loadStructuresTileIndex() {
-  if (structuresTileIndex) return structuresTileIndex;
+/** Full GeoJSON is ~90MB parsed; Render's default Node heap (~256MB) OOMs. Prefer compact on Render unless opted in. */
+function resolveStructuresGeojsonPath(): string {
   const fullPath = resolveDataFile('overlays', 'structures_polygons.full.geojson');
   const fallbackPath = resolveDataFile('overlays', 'structures_polygons.geojson');
-  const filePath = existsSync(fullPath) ? fullPath : fallbackPath;
+  const onRender = process.env.RENDER === 'true';
+  const wantFull =
+    process.env.STRUCTURES_USE_FULL_GEOJSON === 'true' ||
+    (!onRender &&
+      process.env.STRUCTURES_USE_FULL_GEOJSON !== 'false' &&
+      existsSync(fullPath));
+  if (wantFull && existsSync(fullPath)) return fullPath;
+  if (existsSync(fallbackPath)) return fallbackPath;
+  return fullPath;
+}
+
+function loadStructuresTileIndex() {
+  if (structuresTileIndex) return structuresTileIndex;
+  const filePath = resolveStructuresGeojsonPath();
   const data = JSON.parse(readFileSync(filePath, 'utf-8'));
   structuresTileIndex = geojsonvt(data, {
     maxZoom: 18,

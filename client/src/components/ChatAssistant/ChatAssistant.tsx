@@ -3,7 +3,7 @@ import { MessageCircle, X, Send, Loader2, Trash2 } from 'lucide-react';
 import { useChat } from '../../hooks/useChat';
 import { colors, glass } from '../../design';
 import type { Property } from '../../types/property';
-import type { ChatFilterPatch, FocusedAnalysisContext } from '../../services/chat';
+import type { ChatFilterPatch, FocusedAnalysisContext, UserFinancialProfile } from '../../services/chat';
 
 interface Props {
   focusedProperty?: Property | null;
@@ -16,6 +16,8 @@ interface Props {
   compareProperties?: Property[] | null;
   onChatListingResult?: (listingIds: string[] | undefined) => void;
   onFilterPatch?: (patch: ChatFilterPatch | undefined) => void;
+  userFinancialProfile?: UserFinancialProfile | null;
+  onProfileChange?: (patch: UserFinancialProfile) => void;
 }
 
 export function ChatAssistant({
@@ -28,6 +30,8 @@ export function ChatAssistant({
   compareProperties = null,
   onChatListingResult,
   onFilterPatch,
+  userFinancialProfile = null,
+  onProfileChange,
 }: Props) {
   const BUTTON_SIZE = 48;
   const PANEL_GAP = 12;
@@ -56,6 +60,8 @@ export function ChatAssistant({
       if (unsupported?.length) setUnsupportedNotes(unsupported);
     },
     compareProperties,
+    userFinancialProfile,
+    onProfileChange,
   );
   const listRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ lastX: number; lastY: number } | null>(null);
@@ -211,10 +217,20 @@ export function ChatAssistant({
             onMouseDown={startDrag}
           >
             <div className="min-w-0">
-              <p className="text-sm font-bold" style={{ color: colors.white }}>Mortgage &amp; Real Estate</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold" style={{ color: colors.white }}>Mortgage &amp; Real Estate</p>
+                {userFinancialProfile && (
+                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0"
+                    style={{ background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)' }}>
+                    Profile saved
+                  </span>
+                )}
+              </div>
               <p className="text-[10px] mt-0.5 truncate" style={{ color: colors.whiteMuted }} title={focusedProperty?.address}>
                 {onboardingPending
                   ? 'Welcome! Choose how you want to start.'
+                  : !userFinancialProfile && !focusedProperty
+                  ? 'Share your income & credit score for instant mortgage estimates'
                   : focusedProperty
                   ? `Focused: ${focusedProperty.address}`
                   : mode === 'guided'

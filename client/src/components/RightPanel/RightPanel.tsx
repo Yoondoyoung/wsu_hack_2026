@@ -6,7 +6,7 @@ import {
   ShieldAlert, DollarSign, TrendingDown, GripVertical,
 } from 'lucide-react';
 import type { Property } from '../../types/property';
-import type { FocusedMortgagePredictorContext } from '../../services/chat';
+import type { FocusedMortgagePredictorContext, UserFinancialProfile } from '../../services/chat';
 import { formatPrice, formatSqft } from '../../utils/formatters';
 import { crimeRiskLabel } from '../../utils/crimeRisk';
 import { noiseExposureColor, noiseExposureLabel } from '../../utils/noiseExposure';
@@ -44,6 +44,7 @@ interface Props {
   onClearChatListView?: () => void;
   mortgageContextByPropertyId?: Record<string, FocusedMortgagePredictorContext | undefined>;
   onMortgageContextChange?: (propertyId: string, next: FocusedMortgagePredictorContext) => void;
+  userFinancialProfile?: UserFinancialProfile | null;
 }
 
 /* ─── Badge ────────────────────────────────────────────────── */
@@ -448,15 +449,27 @@ function CompactCard({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold leading-tight" style={{ color: selected ? colors.cyan : colors.white }}>{formatPrice(property.price)}</p>
           <p className="text-[11px] mt-0.5 truncate" style={{ color: colors.whiteMuted }}>{property.streetAddress}</p>
-          <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>
-            {property.beds}bd · {property.baths}ba · {formatSqft(property.sqft)}ft²
-            <span style={{ color: TAG_STYLES[crimeRiskLabel(property.crimeRiskLevel)]?.color ?? colors.whiteSubtle }}>
-              {' · '}{crimeRiskLabel(property.crimeRiskLevel)}
-            </span>
-            <span style={{ color: noiseExposureColor(property.noiseExposureLevel) }}>
-              {' · '}{noiseExposureLabel(property.noiseExposureLevel)}
-            </span>
-          </p>
+          <div className="text-[10px] mt-0.5 space-y-0.5">
+            <p className="m-0" style={{ color: colors.whiteSubtle }}>
+              {property.beds}bd · {property.baths}ba · {formatSqft(property.sqft)}ft²
+            </p>
+            <p className="m-0 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 min-w-0">
+              <span
+                style={{
+                  color: TAG_STYLES[crimeRiskLabel(property.crimeRiskLevel)]?.color ?? colors.whiteSubtle,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {crimeRiskLabel(property.crimeRiskLevel)}
+              </span>
+              <span style={{ color: colors.whiteSubtle, flexShrink: 0 }} aria-hidden>
+                ·
+              </span>
+              <span style={{ color: noiseExposureColor(property.noiseExposureLevel), whiteSpace: 'nowrap' }}>
+                {noiseExposureLabel(property.noiseExposureLevel)}
+              </span>
+            </p>
+          </div>
         </div>
 
         {/* Status badge */}
@@ -516,6 +529,7 @@ export function RightPanel({
   onClearChatListView,
   mortgageContextByPropertyId,
   onMortgageContextChange,
+  userFinancialProfile,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedCardRef = useRef<HTMLDivElement>(null);
@@ -670,6 +684,7 @@ export function RightPanel({
           initialMortgageContext={mortgageContextByPropertyId?.[detailProperty.id] ?? null}
           onMortgageContextChange={onMortgageContextChange}
           onShowRoute={onShowRoute}
+          userFinancialProfile={userFinancialProfile}
         />
       )}
     </>

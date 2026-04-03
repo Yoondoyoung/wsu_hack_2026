@@ -323,14 +323,14 @@ export function LeftPanel({
                   <button
                     type="button"
                     onClick={onResetFilters}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-all"
+                    className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] transition-all"
                     style={{
                       borderColor: `${colors.whiteSubtle}50`,
                       background: colors.whiteSoft,
                       color: colors.whiteMuted,
                     }}
                   >
-                    <RotateCcw size={11} />
+                    <RotateCcw size={10} />
                     Reset Filters
                   </button>
                 </div>

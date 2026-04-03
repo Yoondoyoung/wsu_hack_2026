@@ -4,6 +4,7 @@ import {
   type ChatMessage,
   type ChatFilterPatch,
   type FocusedAnalysisContext,
+  type UserFinancialProfile,
 } from '../services/chat';
 import type { Property } from '../types/property';
 
@@ -14,6 +15,8 @@ export function useChat(
   onChatListingResult?: (listingIds: string[] | undefined) => void,
   onFilterPatch?: (patch: ChatFilterPatch | undefined, unsupported: string[] | undefined) => void,
   compareProperties?: Property[] | null,
+  userFinancialProfile?: UserFinancialProfile | null,
+  onProfilePatch?: (patch: UserFinancialProfile) => void,
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -30,10 +33,11 @@ export function useChat(
 
     try {
       const history = [...messages, userMsg];
-      const reply = await postChat(history, { focusedProperty, focusedAnalysis, mode, compareProperties });
+      const reply = await postChat(history, { focusedProperty, focusedAnalysis, mode, compareProperties, userFinancialProfile });
       setMessages((prev) => [...prev, { role: 'assistant', content: reply.message }]);
       onChatListingResult?.(reply.listingIds);
       onFilterPatch?.(reply.filterPatch, reply.unsupportedConstraints);
+      if (reply.profilePatch) onProfilePatch?.(reply.profilePatch);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Something went wrong';
       setError(msg);
@@ -41,7 +45,7 @@ export function useChat(
     } finally {
       setLoading(false);
     }
-  }, [messages, loading, focusedProperty, focusedAnalysis, mode, compareProperties, onChatListingResult, onFilterPatch]);
+  }, [messages, loading, focusedProperty, focusedAnalysis, mode, compareProperties, userFinancialProfile, onChatListingResult, onFilterPatch, onProfilePatch]);
 
   const appendAssistantMessage = useCallback((content: string) => {
     const trimmed = content.trim();

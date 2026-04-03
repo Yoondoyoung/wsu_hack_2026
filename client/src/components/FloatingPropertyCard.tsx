@@ -57,6 +57,7 @@ export function FloatingPropertyCard({ property, x, y, snapTarget, snapToCompare
   const isSnapping = snapTarget || snapToCompare;
   const snapColor  = snapToCompare ? '#a5b4fc' : colors.cyan;  // indigo for compare, cyan for new pair
   const crimeColor = CRIME_COLORS[property.crimeRiskLevel] ?? colors.whiteMuted;
+  const noiseColor = noiseExposureColor(property.noiseExposureLevel);
 
   return (
     <div

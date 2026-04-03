@@ -189,7 +189,7 @@ export function LeftPanel({
               className="text-[11px] font-semibold leading-none"
               style={{ color: colors.white, fontFamily: "'Space Grotesk', 'Inter', sans-serif" }}
             >
-              Utah Smart-Path
+              HomeReady
             </p>
             <p className="text-[10px] mt-0.5" style={{ color: colors.whiteSubtle }}>
               SLC Explorer
@@ -648,7 +648,7 @@ export function LeftPanel({
       {!collapsed && (
         <div className="px-[30px] py-3.5 border-t flex-shrink-0 flex items-center justify-between" style={{ borderTopColor: colors.border }}>
           <p className="text-[9px] font-medium tracking-widest uppercase" style={{ color: colors.white }}>
-            WSU Hackathon · 2026
+            HomeReady · 2026
           </p>
           <button
             onClick={onToggleCollapse}
@@ -679,7 +679,7 @@ export function LeftPanel({
             <ChevronRight size={10} />
           </button>
           <p className="text-[8px] font-semibold" style={{ color: colors.whiteFaint, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
-            WSU
+            HR
           </p>
         </div>
       )}

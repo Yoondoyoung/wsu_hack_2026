@@ -525,7 +525,7 @@ export default function App() {
             className="text-sm font-semibold tracking-widest uppercase"
             style={{ color: colors.white, letterSpacing: '0.12em', fontFamily: "'Space Grotesk', 'Inter', sans-serif" }}
           >
-            Utah Smart-Path
+            HomeReady
           </span>
           <div style={{ width: 1, height: 14, background: colors.whiteDim }} />
           <span className="text-xs font-medium" style={{ color: colors.whiteMuted, letterSpacing: '0.04em' }}>Salt Lake City</span>

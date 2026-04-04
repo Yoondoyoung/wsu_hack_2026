@@ -58,7 +58,7 @@ Credit Score: ${body.credit_score_range ?? 'unknown'} | Loan Type: ${(body.loan_
     const openai = new OpenAI({ apiKey });
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5.4',
       temperature: 0,
       response_format: {
         type: 'json_schema',

@@ -533,7 +533,7 @@ chatRouter.post('/chat', async (req, res) => {
         messages,
         tools: [SEARCH_LISTINGS_TOOL, SET_FILTERS_TOOL, SET_USER_FINANCIAL_PROFILE_TOOL],
         tool_choice: 'auto',
-        max_tokens: 1024,
+        max_completion_tokens: 4096,
       });
 
       const choice = completion.choices[0]?.message;

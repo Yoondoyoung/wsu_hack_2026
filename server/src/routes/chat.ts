@@ -529,7 +529,7 @@ chatRouter.post('/chat', async (req, res) => {
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const completion = await openai.chat.completions.create({
-        model: 'gpt-5.4',
+        model: 'gpt-4o-mini',
         messages,
         tools: [SEARCH_LISTINGS_TOOL, SET_FILTERS_TOOL, SET_USER_FINANCIAL_PROFILE_TOOL],
         tool_choice: 'auto',
